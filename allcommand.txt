@@ -1,0 +1,266 @@
+1. Scaffold a module:
+
+Use the module-scaffolder skill to create the Questions module. Here is the domain schema:
+
+Schema::create('questions', function (Blueprint $table) {
+$table->id();
+$table->char('content_hash', 64)->unique(); 
+$table->text('question_text');
+$table->string('question_type', 50)->default('single_choice');
+$table->string('difficulty_level', 50)->default('medium');
+$table->text('explanation')->nullable();
+$table->string('study_link')->nullable();
+$table->string('hint_text')->nullable();
+$table->boolean('is_active')->default(true);
+$table->softDeletes(); 
+$table->timestamps();
+$table->index(['difficulty_level', 'is_active']);
+$table->index('question_type');
+});
+Schema::create('question_options', function (Blueprint $table) {
+$table->id();
+$table->foreignId('question_id')->constrained('questions')->onDelete('restrict');
+$table->text('option_text');
+$table->boolean('is_correct')->default(false);
+$table->integer('sort_order')->default(0); 
+$table->index(['question_id', 'sort_order']);
+$table->softDeletes();
+$table->timestamps();
+});
+
+2.1 Create a Form:
+
+Use the form-builder skill to create the Question form with Question module. Here is the schema:
+
+Schema::create('questions', function (Blueprint $table) {
+$table->id();
+$table->char('content_hash', 64)->unique(); 
+$table->text('question_text');
+$table->string('question_type', 50)->default('single_choice');
+$table->string('difficulty_level', 50)->default('medium');
+$table->text('explanation')->nullable();
+$table->string('study_link')->nullable();
+$table->string('hint_text')->nullable();
+$table->boolean('is_active')->default(true);
+$table->softDeletes(); 
+$table->timestamps();
+$table->index(['difficulty_level', 'is_active']);
+$table->index('question_type');
+});
+
+
+
+2.2 Save the Form:
+
+Use the store-action-builder skill to save the questions form for Question module. Here is the schema:
+
+Schema::create('questions', function (Blueprint $table) {
+$table->id();
+$table->char('content_hash', 64)->unique(); 
+$table->text('question_text');
+$table->string('question_type', 50)->default('single_choice');
+$table->string('difficulty_level', 50)->default('medium');
+$table->text('explanation')->nullable();
+$table->string('study_link')->nullable();
+$table->string('hint_text')->nullable();
+$table->boolean('is_active')->default(true);
+$table->softDeletes(); 
+$table->timestamps();
+$table->index(['difficulty_level', 'is_active']);
+$table->index('question_type');
+});
+
+
+3.1 show DataTable
+Execute the Index Action Builder Skill for the taxonomy module to safely append the read operation and routes without modifying any existing code.
+
+Schema::create('taxonomies', function (Blueprint $table) {
+$table->id();
+$table->foreignId('parent_id')->nullable()->constrained('taxonomies')->onDelete('cascade');
+$table->string('name');
+$table->string('type'); // 'category', 'class', 'group', 'subject', 'chapter'
+$table->string('slug');
+$table->timestamps();
+$table->index(['parent_id', 'type']);
+$table->unique(['type', 'slug']); 
+});
+
+
+4.1 show EditForm
+Use the edit-form-builder skill to show the Questions Edit form for Question module. Here is the schema:
+
+Schema::create('questions', function (Blueprint $table) {
+$table->id();
+$table->char('content_hash', 64)->unique(); 
+$table->text('question_text');
+$table->string('question_type', 50)->default('single_choice');
+$table->string('difficulty_level', 50)->default('medium');
+$table->text('explanation')->nullable();
+$table->string('study_link')->nullable();
+$table->string('hint_text')->nullable();
+$table->boolean('is_active')->default(true);
+$table->softDeletes(); 
+$table->timestamps();
+$table->index(['difficulty_level', 'is_active']);
+$table->index('question_type');
+});
+Schema::create('question_options', function (Blueprint $table) {
+$table->id();
+$table->foreignId('question_id')->constrained('questions')->onDelete('restrict');
+$table->text('option_text');
+$table->boolean('is_correct')->default(false);
+$table->integer('sort_order')->default(0); 
+$table->index(['question_id', 'sort_order']);
+$table->softDeletes();
+$table->timestamps();
+});
+
+
+
+
+4.2 Update the Form
+Task: Execute the update-action-builder skill for the Question module.
+
+Schema::create('questions', function (Blueprint $table) {
+$table->id();
+$table->char('content_hash', 64)->unique(); 
+$table->text('question_text');
+$table->string('question_type', 50)->default('single_choice');
+$table->string('difficulty_level', 50)->default('medium');
+$table->text('explanation')->nullable();
+$table->string('study_link')->nullable();
+$table->string('hint_text')->nullable();
+
+$table->boolean('is_active')->default(true);
+$table->softDeletes(); 
+$table->timestamps();
+$table->index(['difficulty_level', 'is_active']);
+$table->index('question_type');
+});
+Schema::create('question_options', function (Blueprint $table) {
+$table->id();
+$table->foreignId('question_id')->constrained('questions')->onDelete('restrict');
+$table->text('option_text');
+$table->boolean('is_correct')->default(false);
+$table->integer('sort_order')->default(0); 
+$table->index(['question_id', 'sort_order']);
+$table->softDeletes();
+$table->timestamps();
+});
+
+5.1 Delete the Form
+Task: Implement the Delete feature.
+Module: Questions
+
+Schema::create('questions', function (Blueprint $table) {
+$table->id();
+$table->char('content_hash', 64)->unique(); 
+$table->text('question_text');
+$table->string('question_type', 50)->default('single_choice');
+$table->string('difficulty_level', 50)->default('medium');
+$table->text('explanation')->nullable();
+$table->string('study_link')->nullable();
+$table->string('hint_text')->nullable();
+
+$table->boolean('is_active')->default(true);
+$table->softDeletes(); 
+$table->timestamps();
+$table->index(['difficulty_level', 'is_active']);
+$table->index('question_type');
+});
+Schema::create('question_options', function (Blueprint $table) {
+$table->id();
+$table->foreignId('question_id')->constrained('questions')->onDelete('restrict');
+$table->text('option_text');
+$table->boolean('is_correct')->default(false);
+$table->integer('sort_order')->default(0); 
+$table->index(['question_id', 'sort_order']);
+$table->softDeletes();
+$table->timestamps();
+});
+
+
+
+
+
+
+
+
+
+
+
+
+// updating gallery images
+Please implement the product gallery image upload feature with optional validation:
+1. Product Create & Edit Views: Update the form to include a multiple file input field for gallery images (e.g., `name="gallery_images[]"` with `multiple`).
+2. Optional Handling: Ensure the gallery images field is strictly optional (`nullable|array` and each item `image|mimes:jpeg,png,jpg,webp|max:2048`). If no images are uploaded, the form submission must process successfully without throwing any errors.
+3. Controller & Service Layer: In the Store/Update request handling, check if `gallery_images` are present. If provided, loop through them, upload each file to storage, and create corresponding records in the `product_images` table linked via `product_id`.
+
+CREATE TABLE product_images (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    product_id BIGINT UNSIGNED NOT NULL,
+    image_path VARCHAR(255) NOT NULL,
+    is_featured TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NULL DEFAULT NULL,
+    updated_at TIMESTAMP NULL DEFAULT NULL,
+    CONSTRAINT product_images_product_id_foreign FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+);
+
+
+
+
+Task: Refactor the existing store action/builder class to include the creation of a default product variant.
+
+Context: In our Product Module, the current store action (built via store-action-builder skill) successfully saves product details and gallery images. However, it is missing the logic to insert a default record into the "product_variants" table upon product creation.
+
+
+Technical Requirements:
+
+    Follow the exact store-action-builder skill and architecture currently implemented.
+
+    Insert the variant immediately after the main product is created.
+
+    Default variant mapping: product_id = newly created product ID, sku = 'TEMP-' . product_id, stock_quantity = 0, additional_price = 0, version = 0.
+
+    Ensure the entire execution block (product creation, image uploads, and variant creation) is fully wrapped inside a DB::transaction() to guarantee data integrity.
+
+    Do not use Observers. Keep the logic explicitly inside the action class.
+
+Provide only the updated PHP code for the respective class.
+
+CREATE TABLE `products` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `category_id` BIGINT UNSIGNED NOT NULL,
+  `brand_id` BIGINT UNSIGNED NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `slug` VARCHAR(255) NOT NULL UNIQUE,
+  `description` TEXT NULL,
+  `price` DECIMAL(12, 2) NOT NULL,
+  `sale_price` DECIMAL(12, 2) NULL,ex
+  `featured_image` VARCHAR(255) NULL,
+  `type` ENUM('simple', 'variable', 'digital') NOT NULL DEFAULT 'simple',
+  `status` ENUM('draft', 'active', 'inactive', 'archived', 'pending') NOT NULL DEFAULT 'draft',
+  `created_at` TIMESTAMP NULL,
+  `updated_at` TIMESTAMP NULL,
+  `deleted_at` TIMESTAMP NULL,
+  INDEX `products_type_index` (`type`),
+  INDEX `products_status_index` (`status`),
+  CONSTRAINT `products_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `products_category_id_foreign` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `products_brand_id_foreign` FOREIGN KEY (`brand_id`) REFERENCES `brands` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE product_variants (
+id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+product_id BIGINT UNSIGNED NOT NULL,
+sku VARCHAR(255) NOT NULL,
+stock_quantity INT NOT NULL DEFAULT 0,
+additional_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+version INT NOT NULL DEFAULT 0,
+created_at TIMESTAMP NULL DEFAULT NULL,
+updated_at TIMESTAMP NULL DEFAULT NULL,
+PRIMARY KEY (id),
+UNIQUE KEY product_variants_sku_unique (sku),
+CONSTRAINT product_variants_product_id_foreign FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+);

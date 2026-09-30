@@ -1,0 +1,546 @@
+================================================================================
+03 - MODULE SCAFFOLDING (STRICT) - LOAD ONLY WHEN SCAFFOLDING A NEW MODULE
+Source: AGENTS-scaffolding.md (Part 2, section 7)
+Binding system instructions. Example module used throughout: Coupon.
+Model on core/Category for anything ambiguous.
+================================================================================
+
+SCAFFOLD ONLY (Golden Rule #5, 01-universal-philosophy.txt). Signatures +
+"// TODO:" markers, NOT implementations. NO business logic and NO use-case
+methods are generated during scaffolding - see the EMPTY-SKELETON GUARD
+below. Request DTOs and Request Mappers (<Module>Mapper +
+<Module>MapperContract) are DEFERRED and are NOT part of the initial
+scaffold (see 04-crud-pipeline.txt).
+
+--------------------------------------------------------------------------------
+SCAFFOLDING EXECUTION GUARDRAILS (STRICT - extends Golden Rules #6-#7)
+--------------------------------------------------------------------------------
+
+1. NO SPECULATION ABOUT MISSING SOURCES. During any scaffold operation the
+   AI Agent must not guess, assume, or speculate about the existence or
+   state of files, archives, or external modules (e.g., compressed zips
+   like Brand.zip, unextracted source states, or "probably elsewhere"
+   modules). The workspace directory tree and the user-provided
+   schema/command are the ONLY inputs.
+2. MISSING-BUT-MANDATED => CREATE IMMEDIATELY. If an artifact required by
+   the FULL-BASELINE MANDATE, the Shared-utility mandates, or the Mandatory
+   Member Rules is absent from the workspace tree, the AI Agent MUST
+   generate it on the spot - no warnings, no confirmation prompts, no
+   speculation about its whereabouts.
+3. EXACT-COMMAND EXECUTION ONLY. Perform precisely the requested generation
+   or refactor across the specified layer directories (Domain, Application,
+   Infrastructure). Do not run peripheral terminal diagnostics or
+   unrequested file system extractions as part of a scaffold operation.
+   Exception (STRICT): Creating missing Shared Infrastructure adapters
+   (e.g., core/Shared/Infrastructure/Repositories/BaseRepository.php,
+   LaravelTransactionManager, EloquentSlugChecker, LaravelFileUploader)
+   that correspond to newly injected ports during a scaffold is EXEMPT
+   from the exact-directory restriction.
+4. YAGNI NEVER TRIMS THE BASELINE. YAGNI applies only to business logic -
+   it never justifies omitting mandated structural artifacts, ports,
+   mappers, or envelope wiring.
+
+--------------------------------------------------------------------------------
+7.1 DIRECTORY TREE TO CREATE
+--------------------------------------------------------------------------------
+
+core/Coupon/
++-- Domain/
+|   +-- Entities/CouponEntity.php
+|   +-- Contracts/CouponRepositoryContract.php
+|   +-- DataObjects/CouponData.php
+|   +-- Exceptions/CouponNotFoundException.php
++-- Application/
+|   +-- Contracts/CouponMapperContract.php
+|   +-- DTOs/
+|   |   +-- Responses/CouponResponseDTO.php
+|   +-- Mappers/CouponResponseMapper.php
+|   +-- Services/CouponService.php
++-- Infrastructure/
+    +-- Repositories/CouponRepository.php
+    +-- Mappers/CouponEntityMapper.php
+
+FULL-BASELINE MANDATE (AUTOMATED BOILERPLATE - STRICT). During ANY
+new-module scaffold operation, the AI must automatically generate ALL
+common, generic, and technical artifacts of the tree above - regardless of
+whether a specific use case has requested them yet. A scaffold that
+generates only the artifacts named in the immediate request is INCOMPLETE
+and fails review. This mandate additionally includes STRUCTURAL SUPPORT
+implied by the provided schema/migration:
+
+- a "slug" column => the module is wired for slug generation/uniqueness
+  (SlugCheckerContract injected per the Schema-conditional Shared-port
+  injection rule below);
+- a "thumbnail" / "image" / "file" column => the module is wired for media
+  handling (FileUploaderContract injected per the same rule);
+- any other schema-implied common utility with an existing Shared contract
+  (02-framework-adapter-laravel.txt, section 2.3) => inject that contract -
+  never re-invent it, never invent a new Shared port for it.
+
+Structural support means CONSTRUCTOR WIRING ONLY - the EMPTY-SKELETON GUARD
+still applies: no use-case methods, no business logic at scaffold time.
+
+--------------------------------------------------------------------------------
+SHARED UTILITY AUTO-GENERATION - SlugGenerator (STRICT)
+--------------------------------------------------------------------------------
+
+Exception to the scaffold-only and empty-skeleton rules, sanctioned because
+this is a stable, generic, technical Shared capability (P4 admission rule),
+not module business logic:
+
+1. If a new module schema contains a "slug" column, the AI Agent must first
+   check whether the global shared utility file
+   core/Shared/Infrastructure/Utilities/SlugGenerator.php already exists in
+   the workspace.
+2. If the file already exists, reuse it - never regenerate, duplicate, or
+   fork it per module (section 2.3: reuse Shared building blocks; never
+   re-invent them).
+3. If the file does not exist, the AI Agent MUST automatically generate it
+   alongside the module artifacts, placed precisely under the
+   Core\Shared\Infrastructure\Utilities namespace.
+4. The generated file must strictly contain the complete production-ready
+   implementation of the Unicode/Bangla-compliant multi-byte slug
+   generation logic, with all of the following, none optional:
+   - declare(strict_types=1); at the top of the file.
+   - Constructor injection of Core\Shared\Domain\Contracts\SlugCheckerContract
+     (the uniqueness port - the only I/O the utility may perform).
+   - A MAX_ATTEMPTS constant of 100 enforced via a bounded FOR loop (never
+     an unbounded WHILE) when suffixing collisions; on exhaustion, throw a
+     RuntimeException.
+   - Safe multi-byte truncation (mb_strlen/mb_substr, UTF-8) mapping the
+     base slug against the 255 VARCHAR length constraint, reserving suffix
+     headroom and trimming any trailing dash after truncation.
+   - Unicode-aware base-slug creation: replace every non-letter/non-number
+     (~[^\pL\pN]+~u) with a dash, collapse duplicate dashes, trim edge
+     dashes, lowercase via mb_strtolower - natively supporting Bangla and
+     other non-Latin scripts.
+
+--------------------------------------------------------------------------------
+BASEREPOSITORY IMPLEMENTATION MANDATE (STRICT)
+--------------------------------------------------------------------------------
+
+Whenever scaffolding core/Shared/Infrastructure/Repositories/
+BaseRepository.php, you MUST NOT generate an empty skeleton. You MUST
+generate an abstract class BaseRepository with strict types and the
+following fully implemented methods based on this exact specification:
+
+__construct:      Takes a single promoted parameter
+                  "protected readonly \Illuminate\Database\Eloquent\Model
+                  $model".
+fetchAllLatest:   Returns "\Illuminate\Database\Eloquent\Collection".
+                  Logic: returns $this->model->latest()->get();
+findRecord:       Takes "int $id", returns
+                  "?\Illuminate\Database\Eloquent\Model".
+                  Logic: returns $this->model->find($id);
+createRecord:     Takes "array $data", returns
+                  "\Illuminate\Database\Eloquent\Model".
+                  Logic: returns $this->model->create($data);
+updateRecord:     Takes "int $id, array $data", returns
+                  "?\Illuminate\Database\Eloquent\Model".
+                  Logic: Finds the record. If not found, return null. If
+                  found, use $record->fill($data). Then explicitly check
+                  if ($record->isDirty()), and only call $record->save()
+                  if it is dirty. Return the $record.
+deleteRecord:     Takes "int $id", returns "bool".
+                  Logic: returns $this->model->destroy($id) > 0;
+paginateEloquent: Takes "int $perPage = 10", returns
+                  "\Illuminate\Pagination\LengthAwarePaginator".
+                  Logic: returns $this->model->latest()->paginate($perPage);
+
+PROTECTED VISIBILITY RULE (STRICT). All six CRUD methods (fetchAllLatest,
+findRecord, createRecord, updateRecord, deleteRecord, and paginateEloquent)
+MUST be declared with 'protected' visibility. Only the constructor is
+public. NOTE: This is required to enforce the architectural boundary and
+prevent framework types (Eloquent models/collections) from leaking into
+the domain layer - child module repositories call these helpers
+internally, map the results to pure Domain Entities via their
+EntityMapper, and expose only those entities through their own public
+methods.
+
+--------------------------------------------------------------------------------
+7.1.1 MANDATORY MEMBER RULES (PER ARTIFACT) - STRICT
+--------------------------------------------------------------------------------
+
+When scaffolding a core module, each artifact below MUST ship the listed
+members. These are not optional niceties - a module missing them is
+INCOMPLETE and fails review. Derive every field from the PROVIDED
+schema/migration; never invent or omit columns.
+
+CLARIFICATION (resolves the apparent conflict with Golden Rule #5): Entity,
+Enum, and DataObject members are FULLY IMPLEMENTED AT SCAFFOLD TIME - they
+represent mechanical database schema mappings, not business logic.
+Services, Contracts, and Repositories remain strictly empty skeletons per
+the EMPTY-SKELETON GUARD below.
+
+ENTITY (Domain/Entities/)
+  Mandatory members: readonly class + constructor property promotion, one
+  property per schema column.
+  Notes: Strict setup: types match the schema EXACTLY (nullable -> ?type,
+  enums -> the Domain enum). Pure - no framework, no I/O.
+
+ENUM (Domain/Enums/)
+  Mandatory members: label(): string (a match expression returning
+  human-readable strings) AND static values(): array.
+  Notes: CONDITIONAL - generate only if the schema contains enum/state
+  columns. values() returns array_column(self::cases(), 'value'). Cases
+  mirror the schema's column values.
+
+DATAOBJECT (Domain/DataObjects/)
+  Mandatory members: toArray(): array mapping every property to its DB
+  column.
+  Notes: Keys MUST match the table columns exactly; enum properties are
+  unwrapped via ->value. This is the shape handed to the Eloquent adapter.
+
+REQUEST DTO (Application/DTOs/Requests/) - DEFERRED
+  Mandatory members: constructor with promoted readonly properties ONLY
+  (NO static factory methods - see 04-crud-pipeline.txt), PLUS an
+  immutable with*() clone for each derived/deferred field that exists in
+  the schema.
+  Notes: DEFERRED - generated ONLY when the specific Create/Update feature
+  is built (see 04-crud-pipeline.txt), never during the initial scaffold.
+  Uploaded-file properties are typed "mixed" - never a framework type.
+  The DTO is instantiated exclusively by the module's Request Mapper
+  (<Module>Mapper implementing <Module>MapperContract). Add
+  withSlug(string $slug): self when a slug column exists;
+  withStoreImage(string $path): self (or withLogo(...), etc.) when an
+  image/file column exists. Each with*() returns a NEW instance
+  (immutability) - never mutate.
+
+SCHEMA-CONDITIONAL SHARED-PORT INJECTION (STRICT). The Application
+Service's constructor dependencies are derived MECHANICALLY from the
+schema/migration at scaffold time:
+
+- If a "slug" column exists in the schema, the Application Service MUST be
+  scaffolded with Core\Shared\Domain\Contracts\SlugCheckerContract injected
+  into its constructor.
+- If a "thumbnail", "image", or "file" column exists in the schema, the
+  Application Service MUST be scaffolded with
+  Core\Shared\Domain\Contracts\FileUploaderContract injected into its
+  constructor.
+
+Even under the EMPTY-SKELETON GUARD below, these core Shared ports must be
+PRE-INJECTED into the Service constructor so the infrastructure utilities
+are instantly available when the business logic is implemented later.
+Injecting a port is constructor wiring, not business logic - it does NOT
+breach the guard. A Service scaffolded against a schema containing these
+columns but missing the corresponding Shared port is INCOMPLETE and fails
+review.
+
+ADAPTER CO-GENERATION MANDATE (STRICT). If you inject a Shared port (like
+TransactionManagerContract, SlugCheckerContract, or FileUploaderContract)
+into the Service, you MUST instantly check if its corresponding concrete
+adapter exists in core/Shared/Infrastructure/. If missing, you MUST
+automatically generate the fully implemented adapter in the Shared
+directory immediately as part of the scaffolding process, without asking
+for permission.
+
+EMPTY-SKELETON GUARD: Services, Contracts, and Repositories MUST be
+generated as empty skeletons containing ONLY constructors and dependency
+injections (including the schema-conditional Shared ports mandated above).
+Absolutely NO use-case method signatures (like create, update, findById)
+should be generated during the initial scaffold phase.
+
+CONSISTENCY GUARD. A with*() clone must reference only properties that
+actually exist on the constructor. Passing a named argument for a field the
+DTO does not declare is a defect (fatal "Unknown named parameter") - keep
+the property list, the Request Mapper, and every with*() clone in
+lock-step.
+
+NOTE: The example code blocks below use generic TODO stubs only because no
+concrete database schema is provided here; when scaffolding against a real
+migration, apply the mechanical schema mapping rules of 7.1.1 in full.
+
+--------------------------------------------------------------------------------
+7.2 DOMAIN - ENTITY (PURE, IMMUTABLE)
+--------------------------------------------------------------------------------
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Domain\Entities;
+
+    /**
+     * Pure, framework-agnostic domain entity. No persistence, no framework,
+     * no I/O.
+     */
+    readonly class CouponEntity
+    {
+        public function __construct(
+            public int $id,
+            public string $code,
+            // TODO: add the immutable business fields this entity needs
+            //       (amount, expiresAt...)
+        ) {}
+    }
+
+--------------------------------------------------------------------------------
+7.3 DOMAIN - CONTRACT (THE PORT)
+--------------------------------------------------------------------------------
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Domain\Contracts;
+
+    /**
+     * PORT: the Application layer depends on THIS, never on Eloquent.
+     */
+    interface CouponRepositoryContract
+    {
+        // TODO: declare only the operations the use cases actually
+        //       require (ISP).
+    }
+
+--------------------------------------------------------------------------------
+7.4 DOMAIN - DATAOBJECT (IMMUTABLE PERSISTENCE INPUT)
+--------------------------------------------------------------------------------
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Domain\DataObjects;
+
+    /**
+     * Immutable data crossing Application -> Repository. Not an Entity
+     * (has no identity yet).
+     */
+    readonly class CouponData
+    {
+        public function __construct(
+            public string $code,
+            // TODO: fields to persist
+        ) {}
+
+        /** Shape handed to the Eloquent adapter. */
+        public function toArray(): array
+        {
+            // TODO: return ['code' => $this->code, ...];
+            return [];
+        }
+    }
+
+--------------------------------------------------------------------------------
+7.5 APPLICATION - REQUEST DTO + REQUEST MAPPER (DEFERRED - NOT SCAFFOLDED)
+--------------------------------------------------------------------------------
+
+DEFERRED ARTIFACTS: the Request DTO and its Request Mapper
+(<Module>Mapper implementing <Module>MapperContract) are NOT generated
+during the initial scaffold phase. They are built only when the specific
+Create/Update feature is implemented. The full templates and rules live in
+04-crud-pipeline.txt.
+
+--------------------------------------------------------------------------------
+7.6 APPLICATION - RESPONSE DTO + MAPPER
+--------------------------------------------------------------------------------
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Application\DTOs\Responses;
+
+    /**
+     * Shape returned to the delivery layer. Never expose an Entity
+     * directly to a View/JSON.
+     */
+    readonly class CouponResponseDTO
+    {
+        public function __construct(
+            public int $id,
+            public string $code,
+            // TODO: presentation-safe fields (e.g. formatted values,
+            //       resolved URLs)
+        ) {}
+    }
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Application\Mappers;
+
+    use Core\Coupon\Application\DTOs\Responses\CouponResponseDTO;
+    use Core\Coupon\Domain\Entities\CouponEntity;
+
+    final class CouponResponseMapper
+    {
+        public function toResponseDTO(CouponEntity $entity): CouponResponseDTO
+        {
+            // TODO: map entity -> response DTO (this is where presentation
+            //       concerns are added)
+            return new CouponResponseDTO(id: $entity->id, code: $entity->code);
+        }
+    }
+
+--------------------------------------------------------------------------------
+7.7 APPLICATION - SERVICE (USE CASE ORCHESTRATION)
+--------------------------------------------------------------------------------
+
+Baseline constructor per 7.1 / 7.1.1: repository contract, response mapper,
+transaction manager, and logger are ALWAYS injected; SlugCheckerContract
+and FileUploaderContract are injected because the (assumed) schema carries
+slug and image columns - drop whichever the real schema does not imply.
+Still an empty skeleton: constructor only, no use-case methods.
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Application\Services;
+
+    use Core\Coupon\Application\Mappers\CouponResponseMapper;
+    use Core\Coupon\Domain\Contracts\CouponRepositoryContract;
+    use Core\Shared\Domain\Contracts\FileUploaderContract;
+    use Core\Shared\Domain\Contracts\SlugCheckerContract;
+    use Core\Shared\Domain\Contracts\TransactionManagerContract;
+    use Psr\Log\LoggerInterface;
+
+    /**
+     * Orchestrates the use case. Depends ONLY on interfaces + DTOs.
+     * Returns Result - never throws for normal control flow.
+     */
+    final class CouponService
+    {
+        public function __construct(
+            private readonly CouponRepositoryContract $coupons,
+            private readonly CouponResponseMapper $mapper,
+            private readonly TransactionManagerContract $transactionManager,
+            private readonly LoggerInterface $logger,
+            private readonly SlugCheckerContract $slugChecker,
+            private readonly FileUploaderContract $fileUploader,
+        ) {}
+    }
+
+--------------------------------------------------------------------------------
+7.8 INFRASTRUCTURE - REPOSITORY (THE ADAPTER)
+--------------------------------------------------------------------------------
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Infrastructure\Repositories;
+
+    use App\Models\Coupon;
+    use Core\Coupon\Domain\Contracts\CouponRepositoryContract;
+    use Core\Coupon\Infrastructure\Mappers\CouponEntityMapper;
+    use Core\Shared\Infrastructure\Repositories\BaseRepository;
+
+    /**
+     * ADAPTER: the ONLY place Eloquent for this module is allowed.
+     * Converts Model <-> Entity via the mapper; returns Domain types only.
+     */
+    final class CouponRepository extends BaseRepository implements CouponRepositoryContract
+    {
+        public function __construct(
+            Coupon $model,
+            private readonly CouponEntityMapper $mapper,
+        ) {
+            parent::__construct($model);
+        }
+    }
+
+--------------------------------------------------------------------------------
+7.9 INFRASTRUCTURE - ENTITY MAPPER
+--------------------------------------------------------------------------------
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Infrastructure\Mappers;
+
+    use Core\Coupon\Domain\Entities\CouponEntity;
+
+    /** Model array -> pure Domain Entity. Keeps Eloquent out of the core. */
+    final class CouponEntityMapper
+    {
+        public function toEntity(array $data): CouponEntity
+        {
+            // TODO: return new CouponEntity(id: $data['id'],
+            //       code: $data['code'], ...);
+            return new CouponEntity(id: (int) $data['id'], code: (string) $data['code']);
+        }
+    }
+
+--------------------------------------------------------------------------------
+7.10 WIRING - REGISTER THE BINDING (ONCE, AT THE COMPOSITION ROOT)
+--------------------------------------------------------------------------------
+
+    // app/Providers/AppServiceProvider::register()
+    $this->app->bind(
+        \Core\Coupon\Domain\Contracts\CouponRepositoryContract::class,
+        \Core\Coupon\Infrastructure\Repositories\CouponRepository::class,
+    );
+
+--------------------------------------------------------------------------------
+7.11 DELIVERY - THIN CONTROLLER (IN app/, NOT core/)
+--------------------------------------------------------------------------------
+
+Canonical flow: Controller constructor receives BOTH the Service and
+MapperContract. The store() method receives ONLY the FormRequest.
+The Mapper builds the Request DTO from the validated array passed from
+the Controller ($request->validated()). Service handles core logic
+(file uploads via FileUploaderContract, derived fields via with*() clones)
+-> returns Result -> Controller translates it. Controllers NEVER call
+DTO::fromArray() (the method must not exist).
+
+**CONSTRUCTOR INJECTION MANDATE (STRICT):**
+- The Controller's `__construct()` MUST receive the Module Service (e.g.,
+  `CouponService`) AND the ModuleMapperContract (e.g., `CouponMapperContract`).
+- The `store()` / `update()` methods MUST receive ONLY the FormRequest.
+- ALL dependencies OTHER than the HTTP FormRequest MUST be injected via the
+  constructor - never via method parameters.
+
+**MAPPER VARIABLE NAMING RULE (STRICT):**
+- Controllers MUST use `$mapper` as the variable name for the injected
+  ModuleMapperContract dependency. This convention keeps constructor signatures
+  clean and controller code fluent (e.g., `$this->mapper->mapToCreateDTO(...)`).
+- Exception: if a Controller legitimately injects more than one mapper contract,
+  use descriptive names (`$categoryMapper`, `$brandMapper`), but this should
+  never happen - each Controller owns one module's delivery.
+
+**CORE FRAMEWORK-AGNOSTIC RULE (STRICT):**
+- The MapperContract in the Core Application Layer MUST accept a plain `array` - NEVER
+  type-hint a Laravel FormRequest or any framework-specific class.
+- The Controller passes `$request->validated()` (the array) to the mapper.
+- This keeps the Core layer strictly framework-agnostic.
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace App\Http\Controllers\Admin;
+
+    use App\Http\Controllers\Controller;
+    use Core\Coupon\Application\Contracts\CouponMapperContract;
+    use Core\Coupon\Application\Services\CouponService;
+    use Illuminate\Http\RedirectResponse;
+
+    final class CouponController extends Controller
+    {
+        // BOTH Service and MapperContract injected via CONSTRUCTOR
+        public function __construct(
+            private readonly CouponService $coupons,
+            private readonly CouponMapperContract $mapper  // NOTE: always $mapper per MAPPER VARIABLE NAMING RULE
+        ) {}
+
+        // ONLY the FormRequest is passed to the action method
+        public function store(CouponStoreRequest $request): RedirectResponse
+        {
+            // Pass VALIDATED ARRAY (not the request object) to keep Core framework-agnostic
+            $couponCreateDTO = $this->mapper->mapToCreateDTO($request->validated());
+            $result = $this->coupons->createCoupon($couponCreateDTO);
+
+            return $result->isFailure()
+                ? back()->with('error', $result->message)->withInput()
+                : redirect()->route('admin.coupons.index')->with('success', $result->message);
+        }
+    }
+
+================================================================================
+END OF 03 - MODULE SCAFFOLDING
+================================================================================

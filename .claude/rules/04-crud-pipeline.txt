@@ -1,0 +1,313 @@
+File: docs/ai-rules/04-crud-pipeline.txt
+Phase: CRUD Implementation and Use-Case Logic
+
+--------------------------------------------------------------------------------
+STEP 1 - REQUEST DTO (DEFERRED GENERATION)
+--------------------------------------------------------------------------------
+
+The Request DTO (<Module><Action>DTO, e.g. CouponCreateDTO) is NOT
+generated during the initial scaffold. It is built ONLY when the specific
+Create/Update feature is implemented. Location:
+core/<Module>/Application/DTOs/Requests/. Immutable readonly class.
+
+Mandatory members (per the Mandatory Member Rules):
+
+- A constructor with promoted readonly properties ONLY. The Request DTO
+  carries NO factory logic of any kind.
+- Properties representing uploaded files MUST be typed "mixed" - never
+  Illuminate\Http\UploadedFile or any other framework type - so the DTO
+  stays strictly framework-agnostic.
+- One immutable with*() clone for EACH derived/deferred field that exists
+  in the schema:
+    - withSlug(string $slug): self when a "slug" column exists;
+    - withStoreImage(string $path): self (or withLogo(...), etc.) when an
+      image/file column exists.
+  Each with*() returns a NEW instance (immutability) - never mutate in
+  place; every promoted property must be re-passed by name.
+
+CONSISTENCY GUARD. A with*() clone must reference only properties that
+actually exist on the constructor. Passing a named argument for a field the
+DTO does not declare is a defect (fatal "Unknown named parameter") - keep
+the property list, the Request Mapper (STEP 4), and every with*() clone in
+lock-step.
+
+STATIC-FACTORY PROHIBITION (GLOBAL - STRICT). The AI must NEVER generate
+static factory methods (fromArray(), fromRequest(), fromValidated(), ...)
+inside core Request DTOs, and never any member that depends on a
+framework-specific request structure. ALL request-to-DTO translation MUST
+happen inside the module's Request Mapper (STEP 4) - the
+Infrastructure/Application mapper layer - never inside the DTO itself and
+never inline in a Controller.
+
+Template:
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Core\Coupon\Application\DTOs\Requests;
+
+    /**
+     * Carries validated delivery-layer input INTO the Service. Immutable.
+     * Built EXCLUSIVELY by the module's Request Mapper - no factory
+     * methods here.
+     */
+    readonly class CouponCreateDTO
+    {
+        public function __construct(
+            public string $code,
+            public mixed $image = null, // uploaded file: ALWAYS "mixed",
+                                        // never a framework type
+            // TODO: input fields
+        ) {}
+
+        /**
+        * MANDATORY: one immutable with*() clone per derived/deferred
+        * field that exists in the schema (e.g. withSlug() for a slug
+        * column, withStoreImage()/withLogo() for an image column).
+        * Return a NEW instance - every promoted property must be
+        * re-passed by name; never mutate in place.
+        * 
+        * IMMUTABILITY EXAMPLE:
+        * return new self(code: $this->code, slug:$slug, ...); // CORRECT
+        * $this->slug = $slug; return$this; // WRONG
+        */
+        // public function withSlug(string $slug): self
+        // {
+        //     // TODO: return new self(code: $this->code, slug:$slug, ...);
+        // }
+    }
+
+--------------------------------------------------------------------------------
+STEP 2 - CONTRACT AND REPOSITORY METHODS
+--------------------------------------------------------------------------------
+
+Declare on the <Module>RepositoryContract port ONLY the operations the
+requested use case actually requires (Interface Segregation). Implement
+them in the Infrastructure <Module>Repository (the ONLY place Eloquent for
+the module is allowed), converting Model -> Entity via the
+<Module>EntityMapper and returning Domain types only - never ORM objects.
+The DataObject's toArray() (keys matching the table columns exactly, enums
+unwrapped via ->value) is the shape handed to the Eloquent adapter.
+
+--------------------------------------------------------------------------------
+STEP 3 - SERVICE METHOD IMPLEMENTATION (USE-CASE ORCHESTRATION)
+--------------------------------------------------------------------------------
+
+Implement the use-case method on the already-scaffolded <Module>Service,
+using only the injected ports. The Service depends ONLY on interfaces +
+DTOs, and RETURNS Result - it never throws for normal control flow;
+exceptions are caught and converted to a failure Result.
+
+Canonical flow (how a request travels):
+
+Route
+  -> Controller (validate via FormRequest; injects the module's
+     <Module>MapperContract via method injection)
+      -> Request Mapper builds the Application Request DTO from the
+         FormRequest / validated array
+         (e.g. $this->mapper->mapToCreateDTO($request->validated()))
+      -> call Service method
+         ($couponService->createCoupon($couponCreateDTO))
+            - TransactionManagerContract::beginTransaction()
+            - SlugGenerator / FileUploaderContract (via Shared ports) -
+              file uploads and derived fields are applied HERE via the
+              DTO's with*() clones
+            - build Domain DataObject (CouponData)
+            - RepositoryContract::create() -> returns Domain Entity
+            - ResponseMapper::toResponseDTO(entity)
+            - commit() (rollback + cleanup on failure)
+            - return Result::success($responseDTO)
+              | Result::failure($msg, $code)
+      -> Controller inspects Result->isFailure() and returns
+         View/Redirect/JSON
+
+Repository internals:
+Repository (adapter) -> Eloquent Model -> EntityMapper -> Entity.
+
+RESULT PATTERN RULES:
+
+- Every Service use-case method returns the Shared Result envelope
+  (success/failure, data, human message, optional errorCode).
+- errorCode holds DOMAIN-SPECIFIC ERROR KEYS (e.g.
+  AUTH_INVALID_CREDENTIALS, CATEGORY_SLUG_CONFLICT), never raw HTTP
+  statuses - Delivery translates keys to status codes.
+- Domain exceptions (e.g. CouponNotFoundException,
+  CouponSlugConflictException) are caught inside the Service and converted
+  to Result::failure - no exceptions leak upward.
+
+TRANSACTION MANAGER RULES:
+
+- Wrap mutating use cases with TransactionManagerContract:
+  beginTransaction() before the work, commit() on success, rollback() plus
+  cleanup (e.g. deleting an already-uploaded file) on failure.
+
+SHARED UTILITIES:
+
+- Slug work goes through the Shared SlugGenerator: generate($sourceValue)
+  for a pure transformation (no I/O); generateUniqueSlug(sourceValue:
+  $sourceValue, table: '<table>') when a database uniqueness check is
+  required (via the SlugCheckerContract port, bounded -<n> collision
+  suffix). Never hide a database check behind a plain transformation name.
+- Media work goes through FileUploaderContract (upload/delete).
+- Reuse Shared building blocks; never re-invent them.
+
+STYLE (from the framework adapter, restated because it governs this step):
+
+- Every file starts with declare(strict_types=1);
+- PHP 8 named arguments MUST be used for multi-parameter calls (e.g.
+  $this->uploader->upload(file: $file, directory: 'brands');); positional
+  arguments MUST be used for single-parameter calls.
+- Semantic variable naming: $couponCreateDTO, not $dto;
+  $transactionManager, not $tx.
+- Where a real business invariant exists, push the rule into the Entity
+  (Tell, Don't Ask): $coupon->isExpired(), not field-reading "if"s
+  scattered across the Service.
+
+--------------------------------------------------------------------------------
+STEP 4 - RESPONSE DTO, REQUEST MAPPER AND MAPPERS
+--------------------------------------------------------------------------------
+
+- Never expose an Entity directly to a View/JSON: the Service returns
+  Result carrying a <Module>ResponseDTO.
+- Implement/extend <Module>ResponseMapper::toResponseDTO(entity) to map
+  Entity -> Response DTO - this is where presentation concerns (formatted
+  values, resolved URLs) are added.
+- Model array -> Entity conversion stays in the Infrastructure
+  <Module>EntityMapper.
+
+REQUEST MAPPER MANDATE (STRICT):
+
+- Every module MUST use a dedicated Request Mapper (e.g. CouponMapper)
+  implementing a contract (e.g. CouponMapperContract).
+- Responsibility: receive a plain array (the validated data) and instantiate
+  the Application Request DTO. This is the ONLY place where request-to-DTO
+  translation is allowed - the Request DTO itself carries no factory methods
+  (see STEP 1).
+- The contract is a port at core/<Module>/Application/Contracts/
+  <Module>MapperContract.php (mockable in controller unit tests); the
+  adapter lives at core/<Module>/Application/Mappers/<Module>Mapper.php
+  (as in core/Brand). The mapper is the translation boundary that keeps
+  the rest of the core framework-agnostic - it is the ONLY core artifact
+  sanctioned to touch the framework's request types.
+- CORE FRAMEWORK-AGNOSTIC RULE (STRICT): The MapperContract in the Core
+  Application Layer MUST accept a plain `array` - NEVER type-hint a Laravel FormRequest
+  or any framework-specific class. The Controller (in the Delivery layer)
+  passes `$request->validated()` to the mapper.
+- One mapToCreateDTO()/mapToUpdateDTO() style method per use case, typed to
+  return the corresponding Request DTO.
+- Bind the contract to the implementation once at the composition root
+  (app/Providers/AppServiceProvider), like every other port.
+
+Sketch:
+
+    interface CouponMapperContract
+    {
+        // Accepts PLAIN ARRAY (validated data) - NOT a FormRequest
+        public function mapToCreateDTO(array $validatedData): CouponCreateDTO;
+    }
+
+    final class CouponMapper implements CouponMapperContract
+    {
+        public function mapToCreateDTO(array $validatedData): CouponCreateDTO
+        {
+            return new CouponCreateDTO(
+                code: $validatedData['code'],
+                image: $validatedData['image'] ?? null, // lands on a "mixed" property
+            );
+        }
+    }
+
+--------------------------------------------------------------------------------
+STEP 5 - DELIVERY WIRING (THIN CONTROLLER)
+--------------------------------------------------------------------------------
+
+- FormRequest (app/Http/Requests/**) carries validation rules only.
+- Controller: inject the <Module>MapperContract via CONSTRUCTOR injection
+  along with the Service. The action method receives ONLY the FormRequest.
+- Mapper builds the Request DTO by receiving the validated array
+  `$request->validated()` from the Controller -> invoke ONE Service method
+  -> translate the Result. Controllers must NEVER call
+  DTO::fromArray() (the method must not exist) and never assemble a DTO
+  inline:
+
+**CONSTRUCTOR INJECTION MANDATE (STRICT):**
+- The Controller's `__construct()` MUST receive the Module Service (e.g.,
+  `CouponService`) AND the ModuleMapperContract (e.g., `CouponMapperContract`).
+- The `store()` / `update()` methods MUST receive ONLY the FormRequest.
+- ALL dependencies OTHER than the HTTP FormRequest MUST be injected via the
+  constructor - never via method parameters.
+
+**MAPPER VARIABLE NAMING RULE (STRICT):**
+- Controllers MUST use `$mapper` as the variable name for the injected
+  ModuleMapperContract dependency. This convention keeps constructor signatures
+  clean and controller code fluent (e.g., `$this->mapper->mapToCreateDTO(...)`).
+- Exception: if a Controller legitimately injects more than one mapper contract,
+  use descriptive names (`$categoryMapper`, `$brandMapper`), but this should
+  never happen - each Controller owns one module's delivery.
+
+    public function __construct(
+        private readonly CouponService $coupons,
+        private readonly CouponMapperContract $mapper  // NOTE: always $mapper
+    ) {}
+
+    public function store(CouponRequest $request): RedirectResponse
+    {
+        // Pass VALIDATED ARRAY (not the request object) to keep Core framework-agnostic
+        $couponCreateDTO = $this->mapper->mapToCreateDTO($request->validated());
+        $result = $this->coupons->createCoupon($couponCreateDTO);
+        return $result->isFailure()
+            ? back()->with('error', $result->message)->withInput()
+            : redirect()->route('admin.coupons.index')->with('success', $result->message);
+    }
+
+- The Service handles the core logic from there: file uploads via
+  FileUploaderContract and derived fields via the DTO's with*() clones,
+  then returns Result.
+
+- Result->isFailure() handling in Delivery is a translation boundary, not a
+  business decision - that "ask" is allowed. Business "if"s live in the
+  core.
+- Route maps URL -> Controller method, nothing else. Any new port binding
+  goes once into app/Providers/AppServiceProvider (composition root).
+
+--------------------------------------------------------------------------------
+STEP 6 - UNIT TESTS (MANDATORY FOR EVERY NEW USE CASE)
+--------------------------------------------------------------------------------
+
+All NEW use cases MUST ship with their corresponding unit tests:
+
+- Every Service use case gets a unit test injecting MOCKED contracts - no
+  real DB, no real storage. Assert on the returned Result
+  (success/failure, data, errorCode).
+- Domain entity behaviour (isExpired(), canFulfil(), ...) is unit-tested
+  directly, pure, no mocks.
+- Repositories/adapters get a separate integration test against a real
+  (test) DB - the only layer allowed to touch Eloquent in tests.
+- Tests live in tests/Unit/<Module>/... and tests/Feature/<Module>/...,
+  mirroring the core/<Module> path.
+  (Unit tests for the older baseline reference modules Brand and Category
+  are deferred; the mandate applies to all new work.)
+
+--------------------------------------------------------------------------------
+DEFINITION OF DONE FOR A CRUD FEATURE
+--------------------------------------------------------------------------------
+
+[ ] Strict typing on; correct namespace matching the path.
+[ ] Domain has zero framework imports; Application imports only
+    ports/DTOs/Shared.
+[ ] All I/O behind a port; the only ORM usage is in Infrastructure.
+[ ] Use-case methods return Result; no exceptions leak upward.
+[ ] Model <-> Entity conversion goes through a mapper.
+[ ] Port -> implementation bound once at the composition root (including
+    the <Module>MapperContract binding).
+[ ] Delivery is thin: validate -> Mapper builds DTO -> use case ->
+    translate Result. No fromArray() anywhere.
+[ ] Entities/DTOs/data objects immutable; changes via with*() clones.
+[ ] Unit tests for the new use case ship with the feature.
+[ ] After adding files under a new namespace path, run
+    composer dump-autoload.
+
+================================================================================
+END OF 04 - CRUD PIPELINE
+================================================================================

@@ -1,0 +1,307 @@
+================================================================================
+02 - FRAMEWORK ADAPTER: LARAVEL (THIS PROJECT - Laravel + core/ modules)
+Source: AGENTS.md, PART 2 - THIS PROJECT (sections 1-6)
+Binding system instructions, specific to THIS repo. When this file seems to
+conflict with 01-universal-philosophy.txt, THIS file (the specific) wins.
+================================================================================
+
+--------------------------------------------------------------------------------
+1. STACK & REFERENCE MODULE
+--------------------------------------------------------------------------------
+
+- Framework: Laravel (PHP). ORM: Eloquent.
+- Every file starts with: declare(strict_types=1);
+- PHP 8 NAMED ARGUMENTS (STRICT): MUST be used for method calls that accept
+  multiple parameters, especially when calling ports/interfaces (e.g.,
+  $this->uploader->upload(file: $file, directory: 'brands');), or boolean
+  flags. However, if a method accepts ONLY ONE argument, you MUST use
+  standard positional arguments without naming (e.g.,
+  $this->uploader->delete($path)). Do not use named arguments for
+  single-parameter calls.
+- REFERENCE IMPLEMENTATION - when in doubt, copy core/Category. Brand
+  follows the same shape. Auth is an EXCEPTION that predates the standard
+  single-service structure; it employs a single-use-case service
+  architecture (e.g., AuthService, LogoutService, ForgotPasswordService) and
+  distinct request DTO naming shapes (e.g., LoginRequestDTO), which is
+  acceptable ONLY for the Auth core module.
+
+--------------------------------------------------------------------------------
+2. DIRECTORY STRUCTURE & SEPARATION OF CONCERNS
+--------------------------------------------------------------------------------
+
+2.1 FRAMEWORK LAYER - app/ (Laravel = the Delivery + composition root)
+
+routes/web.php, routes/api.php
+  Responsibility: Map URL -> Controller method.
+  MUST NOT: Contain logic.
+
+app/Http/Controllers/**
+  Responsibility: Thin adapter: validate -> build DTO -> call Service ->
+                  map Result to Response/View.
+  MUST NOT: Contain business rules, touch the DB, or call repositories
+            directly.
+
+app/Http/Requests/**
+  Responsibility: Validation rules only (FormRequest).
+  MUST NOT: Persist or transform data.
+
+app/Models/**
+  Responsibility: Eloquent models - persistence detail only.
+  MUST NOT: Hold business behaviour; leak into core/Domain or
+            core/Application.
+
+app/Providers/AppServiceProvider
+  Responsibility: Composition root: bind every ...Contract -> its
+                  Infrastructure implementation.
+  MUST NOT: Contain logic, EXCEPT explicit closure-based factory bindings
+            required to wire complex dependencies (e.g., OtpService,
+            ResetPasswordService).
+
+CONTROLLERS ARE DUMB. Validate via FormRequest -> method-inject the
+module's <Module>MapperContract, which builds the Application DTO from the
+request -> invoke one Service method -> translate the Result into an HTTP
+response. Controllers never assemble a DTO themselves.
+Template: app/Http/Controllers/Admin/CategoryController.php.
+
+2.2 CORE - core/<Module>/
+
+core/<Module>/
++-- Domain/                    PURE. No framework. No I/O.
+|   +-- Entities/              <Module>Entity - readonly, immutable business
+|   |                          object
+|   +-- Contracts/             PORTS: <Module>RepositoryContract, etc.
+|   |                          (interfaces). MANDATORY: <Module>MapperContract
+|   |                          - request->DTO mapping port (see core/Brand),
+|   |                          mockable in controller unit tests
+|   +-- DataObjects/           <Module>Data - immutable data crossing into
+|   |                          persistence
+|   +-- Enums/                 Domain enums (status, type...)
+|   +-- Exceptions/            <Module>NotFoundException,
+|                              ...ConflictException
+|
++-- Application/               Use cases / orchestration. No framework.
+|   +-- Services/              <Module>Service - orchestrates the use case,
+|   |                          returns Result
+|   +-- DTOs/                  Responses/ only. Request DTOs (e.g. CreateDTO)
+|   |   |                      are generated later, just-in-time per
+|   |   |                      use-case feature.
+|   |   +-- Responses/         <Module>ResponseDTO - shape returned to the
+|   |                          delivery layer
+|   +-- Mappers/               <Module>ResponseMapper - Entity -> Response
+|                              DTO. MANDATORY: <Module>Mapper - implements
+|                              <Module>MapperContract (request->DTO mapping
+|                              adapter, as in core/Brand; the ONLY sanctioned
+|                              place for request-to-DTO translation)
+|
++-- Infrastructure/            ADAPTERS. Framework-aware (Eloquent,
+    |                          Storage, ...).
+    +-- Repositories/          <Module>Repository implements
+    |                          <Module>RepositoryContract
+    +-- Mappers/               <Module>EntityMapper - model array -> Domain
+    |                          Entity
+    +-- Services/              (Auth module only) Infrastructure-specific
+                               service adapters
+
+2.3 SHARED KERNEL - core/Shared/
+
+Cross-cutting, framework-agnostic building blocks. REUSE THESE; NEVER
+RE-INVENT THEM.
+
+TransactionManagerContract -> LaravelTransactionManager
+  beginTransaction/commit/rollback around a use case. Adapter lives under
+  core/Shared/Infrastructure/Database/ (namespace
+  Core\Shared\Infrastructure\Database) - the canonical home for shared
+  DB-level structural adapters; a Persistence/ sub-folder is NOT used in
+  this repo.
+
+FileUploaderContract -> LaravelFileUploader
+  Upload / delete media.
+
+SlugCheckerContract -> EloquentSlugChecker
+  Uniqueness checks for slugs.
+
+PasswordHasherContract -> LaravelPasswordHasher
+  Hashing operations (passwords).
+
+TokenGeneratorContract -> SanctumTokenGenerator
+  API token generation.
+
+StorageContract -> (no implementation)
+  No concrete implementation exists; serves as a canonical in-context
+  template for public URL generation (retained for upcoming image-URL
+  feature implementation).
+
+Result (Application DTO)
+  Success/failure envelope for every Service method. errorCode holds
+  DOMAIN-SPECIFIC ERROR KEYS (e.g. AUTH_INVALID_CREDENTIALS,
+  CATEGORY_SLUG_CONFLICT), never raw HTTP statuses - Delivery translates
+  keys to status codes.
+
+PaginatedResult (Domain DataObject)
+  Framework-free pagination payload.
+
+BaseRepository (Infrastructure)
+  Shared Eloquent CRUD helpers for repositories.
+
+SlugGenerator (Infrastructure Utility)
+  Slugification. Two semantically distinct methods - see the Semantic
+  Naming Policy below.
+
+SEMANTIC NAMING POLICY FOR UTILITIES (STRICT). Use generate() for basic
+transformations and generateUniqueSlug() exclusively when a database
+uniqueness check is required. On SlugGenerator: generate(string
+$sourceValue) is a pure transformation (no I/O); generateUniqueSlug(string
+$sourceValue, string $table) additionally enforces uniqueness through the
+injected SlugCheckerContract port with a bounded -<n> collision suffix. A
+method name must always reveal whether it performs I/O - never hide a
+database check behind a plain transformation name, and never extend a pure
+transformation with hidden I/O.
+
+ADMISSION RULE (GUARD STRICTLY). Applies the universal Shared rule
+(01-universal-philosophy.txt, P4) to this repo: core/Shared/ is for STABLE,
+GENERIC, TECHNICAL capabilities only. Never put a domain/business concept
+here - if Product and Order both need pricing, that is a dedicated Pricing
+MODULE, not a Shared/PricingHelper. Shared/Domain is imported by every
+module, so hold it to the strictest boundary of all.
+
+--------------------------------------------------------------------------------
+3. PSR-4 AUTOLOADING (ALREADY CONFIGURED - DO NOT CHANGE)
+--------------------------------------------------------------------------------
+
+composer.json:
+
+    "autoload": {
+        "psr-4": {
+            "App\\":  "app/",
+            "Core\\": "core/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\":   "database/seeders/"
+        }
+    }
+
+- core/Category/Domain/Entities/CategoryEntity.php MUST declare
+  namespace Core\Category\Domain\Entities;
+- After adding files under a new namespace path, run composer dump-autoload.
+
+--------------------------------------------------------------------------------
+4. NAMING CONVENTIONS (CONCRETE)
+--------------------------------------------------------------------------------
+
+Domain Entity:               <Module>Entity, readonly class
+                             (e.g. CategoryEntity)
+Repository port:             <Module>RepositoryContract (interface)
+                             (e.g. CategoryRepositoryContract)
+Any port/interface:          ...Contract suffix
+                             (e.g. FileUploaderContract, StorageContract)
+Repository adapter:          <Module>Repository (e.g. CategoryRepository)
+Persistence data object:     <Module>Data, readonly class
+                             (e.g. CategoryData)
+Request DTO:                 <Module><Action>DTO, readonly class
+                             (e.g. CategoryCreateDTO)
+Response DTO:                <Module>ResponseDTO, readonly class
+                             (e.g. CategoryResponseDTO)
+Application Service:         <Module>Service (e.g. CategoryService)
+Domain->App mapper:          <Module>ResponseMapper
+                             (e.g. CategoryResponseMapper)
+Model->Entity mapper:        <Module>EntityMapper
+                             (e.g. CategoryEntityMapper)
+Request->DTO mapper port     <Module>MapperContract (interface)
+(mandatory):                 (e.g. BrandMapperContract)
+Request->DTO mapper adapter  <Module>Mapper (e.g. BrandMapper)
+(mandatory):
+Domain exception:            <Module><Reason>Exception
+                             (e.g. CategorySlugConflictException)
+Enum:                        <Module><Concept>
+                             (e.g. ProductStatus, ProductType)
+
+--------------------------------------------------------------------------------
+5. CANONICAL FLOW (HOW A REQUEST TRAVELS HERE)
+--------------------------------------------------------------------------------
+
+Route
+  -> Controller (validate via FormRequest; method-injects
+     <Module>MapperContract)
+      -> Request Mapper builds the Application Request DTO
+         (e.g. $categoryMapper->mapToCreateDTO($request->validated()))
+      -> call Service method
+         ($categoryService->createCategory($categoryCreateDTO))
+            - TransactionManagerContract::beginTransaction()
+            - SlugGenerator / FileUploaderContract (via Shared ports)
+            - build Domain DataObject (CategoryData)
+            - RepositoryContract::create() -> returns Domain Entity
+            - ResponseMapper::toResponseDTO(entity)
+            - commit() (rollback + cleanup on failure)
+            - return Result::success($responseDTO)
+              | Result::failure($msg, $code)
+      -> Controller inspects Result->isFailure() and returns
+         View/Redirect/JSON
+
+Repository internals:
+Repository (adapter) -> Eloquent Model -> EntityMapper -> Entity.
+
+--------------------------------------------------------------------------------
+6. TESTING (THE PAYOFF OF THIS ARCHITECTURE)
+--------------------------------------------------------------------------------
+
+The whole reason Domain + Application are framework-free is so they can be
+tested WITHOUT a database, HTTP, or Laravel booting. If a module ships
+without these tests, it has paid the abstraction cost without collecting
+the benefit.
+
+RULES:
+
+1. EVERY SERVICE USE CASE HAS A UNIT TEST that injects MOCKED CONTRACTS -
+   no real DB, no real storage. Assert on the returned Result
+   (success/failure, data, errorCode).
+2. DOMAIN ENTITY BEHAVIOUR IS UNIT-TESTED DIRECTLY (pure, no mocks) - e.g.
+   isExpired(), canFulfil(). This is where the Tell-Don't-Ask rules
+   (01-universal-philosophy.txt, P6) are proven.
+3. REPOSITORIES/ADAPTERS GET A SEPARATE INTEGRATION TEST against a real
+   (test) DB - that is the ONLY layer allowed to touch Eloquent in tests.
+4. Tests live in tests/Unit/<Module>/... (pure) and
+   tests/Feature/<Module>/... (integration), mirroring the core/<Module>
+   path.
+
+NOTE ON REFERENCE MODULES: Unit tests for older baseline reference modules
+(like Brand and Category) are deferred. All NEW use cases and service
+modules MUST strictly ship with their corresponding unit tests as mandated
+above.
+
+SKELETON - Service unit test with mocked ports (SCAFFOLD ONLY):
+
+    <?php
+
+    declare(strict_types=1);
+
+    namespace Tests\Unit\Category;
+
+    use Core\Category\Application\Services\CategoryService;
+    use Core\Category\Domain\Contracts\CategoryRepositoryContract;
+    use Core\Shared\Domain\Contracts\TransactionManagerContract;
+    use PHPUnit\Framework\TestCase;
+
+    final class CategoryServiceTest extends TestCase
+    {
+        public function test_create_returns_failure_result_when_slug_conflicts(): void
+        {
+            // TODO:
+            //  1. Mock CategoryRepositoryContract so create() throws
+            //     CategorySlugConflictException.
+            //  2. Mock TransactionManagerContract (expect beginTransaction
+            //     + rollback).
+            //  3. Mock the remaining injected ports (FileUploader, Mapper,
+            //     Logger).
+            //  4. $result = $service->createCategory($categoryCreateDTO);
+            //  5. $this->assertTrue($result->isFailure());
+            //  6. $this->assertSame('CATEGORY_SLUG_CONFLICT', $result->errorCode);
+            $this->markTestIncomplete('Scaffold only.');
+        }
+    }
+
+Note: because every port is an interface (DIP), mocking is trivial - that
+is the design paying off. A Service that is hard to test means a hidden
+concrete dependency to hunt down.
+
+================================================================================
+END OF 02 - FRAMEWORK ADAPTER: LARAVEL
+================================================================================

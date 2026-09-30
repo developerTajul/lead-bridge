@@ -1,0 +1,229 @@
+================================================================================
+01 - UNIVERSAL PHILOSOPHY (PORTABLE - applies to ANY language or framework)
+Source: AGENTS.md, PART 1 - PHILOSOPHY
+Binding system instructions. Framework-agnostic. When this file seems to
+conflict with a project-specific rule file, the project-specific file wins.
+================================================================================
+
+--------------------------------------------------------------------------------
+P1. THE GOLDEN RULES
+--------------------------------------------------------------------------------
+
+1. THE CORE IS A FRAMEWORK-FREE ZONE. Business logic (Domain + Application)
+   imports NO framework, no ORM, no UI, no globals. The only framework-aware
+   layer is Infrastructure.
+
+2. DEPEND ON INTERFACES, NEVER ON CONCRETIONS. Use cases depend on ports
+   (interfaces). Concrete adapters are chosen once, at the composition root.
+
+3. BUSINESS LOGIC RETURNS A Result, IT DOES NOT THROW FOR CONTROL FLOW.
+   Exceptions are for exceptional violations, caught and converted to a
+   failure Result.
+
+4. STRICT TYPING EVERYWHERE the language allows it, with explicit types on
+   every parameter, property, and return.
+
+5. SCAFFOLD ONLY UNLESS TOLD OTHERWISE. When asked to add a module, generate
+   the directory tree, empty class skeletons, and "// TODO:" comments — never
+   the business logic.
+
+6. ANTI-HALLUCINATION GUARDRAIL (STRICT CONTEXT COMPLIANCE). The AI Agent is
+   strictly prohibited from guessing, assuming, or speculating about the
+   existence or state of files, archives, or external modules (e.g.,
+   speculating about compressed zip files like Brand.zip or unextracted
+   source states). The AI Agent MUST operate strictly as a mechanical
+   compiler driven ONLY by the immediate text command and the explicit
+   database schema provided by the user. If a file is missing in the
+   workspace directory tree but required by the scaffolding mandate, the AI
+   Agent MUST create it immediately without issuing warnings, seeking
+   confirmation, or speculating about its whereabouts.
+
+7. EXPLICIT CONTROLLER BOUNDARY (EXACT-COMMAND EXECUTION). The AI Agent must
+   only execute the exact command given. If the user explicitly asks to
+   generate or refactor a module component, the AI Agent must perform exactly
+   that operation across the specified layer directories (Domain,
+   Application, Infrastructure) without attempting to run peripheral terminal
+   diagnostics or unrequested file system extractions.
+
+8. TERMINAL EXECUTION POLICY. Whenever executing terminal commands (like
+   artisan tests, migrations, or builds), automatically append the
+   OS-appropriate terminal bell/sound command (e.g., `; echo -e "\a"` or
+   `; [System.Console]::Beep(1000, 500)`) at the end of the script to notify
+   upon completion.
+
+--------------------------------------------------------------------------------
+P2. ARCHITECTURE MODEL - HEXAGONAL (PORTS & ADAPTERS)
+--------------------------------------------------------------------------------
+
+   Delivery (HTTP / CLI / Queue / UI)      <- framework
+        |  DTO in -> Result out
+   Application (use cases / services)      <- no framework
+        |  depends on Contracts (ports)
+   Domain (entities, ports, value data)    <- ZERO dependencies
+        ^  implemented by
+   Infrastructure (DB, storage, adapters)  <- framework
+
+DEPENDENCY RULE - ONE DIRECTION ONLY: Infrastructure -> Application -> Domain.
+Domain depends on nothing. Delivery and Infrastructure are the only
+framework-aware layers.
+
+LITMUS TEST: if the framework were swapped out, only Delivery and
+Infrastructure change; Domain and Application compile untouched.
+
+--------------------------------------------------------------------------------
+P3. LAYER RESPONSIBILITIES (ABSTRACT)
+--------------------------------------------------------------------------------
+
+DOMAIN
+  Owns:     Entities (immutable), ports (interfaces), value/data objects,
+            domain exceptions, enums.
+  Must NOT: Import any framework/IO; know about persistence or HTTP.
+
+APPLICATION
+  Owns:     Use-case orchestration (services), request/response DTOs,
+            entity->DTO mappers.
+  Must NOT: Touch the ORM, DB, or HTTP request objects; contain a UI concern.
+
+INFRASTRUCTURE
+  Owns:     Port implementations: repositories, storage, transactions,
+            hashing.
+  Must NOT: Leak framework types upward as parameters/returns.
+
+DELIVERY
+  Owns:     Validate input -> build DTO -> call one use case -> translate
+            Result.
+  Must NOT: Contain business rules; call repositories directly.
+
+--------------------------------------------------------------------------------
+P4. CROSS-CUTTING PRINCIPLES
+--------------------------------------------------------------------------------
+
+DECOUPLING (the hard boundaries - non-negotiable):
+
+1. Domain purity - Domain imports only Domain + language built-ins.
+2. Application stays framework-free - receives already-built DTOs.
+3. Abstract ALL I/O behind a port (DB, storage, transactions, hashing, auth,
+   uniqueness). Raw DB/query/storage calls live ONLY inside an Infrastructure
+   adapter.
+4. Persistence models never cross the boundary - repositories map
+   model -> Entity and return Entities, never ORM objects.
+5. Delivery owns no rules - any "if" encoding a business rule belongs in a
+   use case.
+6. One composition root - every port->adapter binding registered in exactly
+   one place.
+
+IMMUTABILITY: entities, DTOs, and data objects are immutable. "Change" =
+return a new instance via a with*() clone, never mutate in place.
+
+NAMING PHILOSOPHY: interfaces are strictly suffixed with "...Contract"
+(e.g., CategoryRepositoryContract), not prefixed "I". One
+class/interface/enum per file; filename === type name. Types PascalCase,
+methods & properties camelCase, constants UPPER_SNAKE_CASE.
+
+SEMANTIC VARIABLE NAMING (STRICT): Avoid abbreviated variable names. Use
+full, semantic names for clarity (e.g., use $couponCreateDTO instead of
+$dto, and $transactionManager instead of $tx). Variables must reflect their
+exact intent.
+
+RESULT PATTERN: every use-case method returns a success/failure envelope
+carrying data, a human message, and an optional error code - so callers
+branch on isFailure() instead of catching exceptions.
+
+SHARED KERNEL ADMISSION RULE: a "shared" folder is for STABLE, GENERIC,
+TECHNICAL capabilities only (transactions, storage, pagination, the Result
+type, a base repository). NEVER put domain/business concepts there. Test
+before adding: "Would this still make sense in a completely different app?"
+No -> it belongs in a module, not Shared. The shared Domain is imported by
+everything, so it is the PUREST LAYER OF ALL - guard it hardest.
+
+--------------------------------------------------------------------------------
+P5. DEFINITION OF DONE (ANY MODULE, ANY PROJECT)
+--------------------------------------------------------------------------------
+
+[ ] Strict typing on; correct namespace matching the path.
+[ ] Domain has ZERO framework imports; Application imports only
+    ports/DTOs/Shared.
+[ ] All I/O behind a port; the only ORM usage is in Infrastructure.
+[ ] Use-case methods return Result; no exceptions leak upward.
+[ ] Model <-> Entity conversion goes through a mapper.
+[ ] Port -> implementation bound once at the composition root.
+[ ] Delivery is thin: validate -> DTO -> use case -> translate Result.
+[ ] Entities/DTOs/data objects immutable; changes via with*() clones.
+
+--------------------------------------------------------------------------------
+P6. DESIGN PRINCIPLES (HOW SOLID / KISS / TELL-DON'T-ASK ARE ENFORCED)
+--------------------------------------------------------------------------------
+
+These are not aspirations - they are the reason the layering above exists.
+Every principle maps to a concrete structural rule you can check in a review.
+
+SOLID:
+
+S - Single Responsibility
+    Rule: One reason to change per class: a Mapper only maps, a Repository
+          only persists, a Service only orchestrates one use case.
+    Violation smell: A Service that also builds URLs, or a Repository
+          holding business rules.
+
+O - Open/Closed
+    Rule: Extend behaviour by adding a new adapter/module, not by editing a
+          stable base. New repos EXTEND the base repository; they don't
+          modify it.
+    Violation smell: Editing shared/base code to bolt on a special case.
+
+L - Liskov Substitution
+    Rule: Any adapter must be a drop-in for its port - same contract, no
+          surprise exceptions, no narrower behaviour.
+    Violation smell: An implementation that throws where the interface
+          implies a return.
+
+I - Interface Segregation
+    Rule: Ports are small and use-case-shaped. A contract declares only the
+          methods its callers actually use.
+    Violation smell: A fat "repository" interface with 20 methods most
+          callers ignore.
+
+D - Dependency Inversion
+    Rule: High-level use cases depend on abstractions (ports); concretions
+          are injected and bound once at the composition root.
+    Violation smell: A Service "new"-ing a concrete adapter, or type-hinting
+          an ORM class.
+
+KISS / YAGNI - SPECIFIC SCOPE RESTRICTION (STRICT):
+Prefer the simplest thing that satisfies the boundaries. The Result
+envelope, the plain data DTOs, and the thin base repository are deliberately
+unclever. Do not add abstraction that no current use case needs (no
+speculative interfaces, no generic "manager of managers"). A trivial lookup
+table does not need the full hexagon - apply judgement.
+
+- YAGNI applies EXCLUSIVELY to business domain invariants and specific
+  feature use cases - do not write speculative business logic, extra API
+  endpoints, or unrequested database queries.
+- YAGNI MUST NEVER be used as an excuse by the AI Agent to omit or skip the
+  mechanical, automated generation of structural framework-agnostic baseline
+  infrastructure adapters, ports, mappings, or core response envelopes
+  mandated during a new module initialization. The FULL-BASELINE MANDATE
+  (see 03-module-scaffolding.txt) is not "speculative abstraction" - it is
+  mandatory structural output; skipping any of it under a YAGNI/KISS
+  rationale is a defect and fails review.
+
+TELL, DON'T ASK (HYBRID RULE FOR THIS PROJECT):
+
+- Push behaviour into the entity where a real business invariant exists.
+  Instead of a Service reading fields and deciding, TELL the entity:
+  $coupon->isExpired(), $order->canBeCancelled(), $stock->canFulfil($qty).
+  The entity guards its own rules.
+- Plain data entities are acceptable for pure CRUD (e.g. a Category that is
+  just name/slug/status). Do not manufacture behaviour that isn't a real
+  rule.
+- The decision must be conscious, per module: if an entity carries genuine
+  invariants and you still scatter "if"s across the Service, that is a
+  defect. If it is genuinely just data, an anemic entity is fine. When in
+  doubt, put the rule IN THE ENTITY.
+- Delivery-layer Result handling (isFailure()) is a translation boundary,
+  not a business decision - that "ask" is allowed. Business "if"s are what
+  must live inside the core.
+
+================================================================================
+END OF 01 - UNIVERSAL PHILOSOPHY
+================================================================================
