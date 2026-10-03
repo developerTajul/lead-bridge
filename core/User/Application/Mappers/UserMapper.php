@@ -8,15 +8,50 @@ use Core\Auth\Domain\Enums\UserRole;
 use Core\Auth\Domain\Enums\UserStatus;
 use Core\User\Application\Contracts\UserMapperContract;
 use Core\User\Application\DTOs\Requests\UserCreateDTO;
+use Core\User\Application\DTOs\Requests\UserLoginDTO;
 use Core\User\Application\DTOs\Requests\UserUpdateDTO;
 
 /**
- * Maps validated request input to User create/update DTOs.
+ * Maps validated request input to User login/create/update DTOs.
  *
  * @implements \Core\User\Application\Contracts\UserMapperContract
  */
 final class UserMapper implements UserMapperContract
 {
+    /**
+     * Builds a UserLoginDTO from validated login input.
+     *
+     * @param array $validatedData
+     *
+     * @return UserLoginDTO
+     */
+    public function mapToLoginDTO(array $validatedData): UserLoginDTO
+    {
+        return new UserLoginDTO(
+            email: (string) $validatedData['email'],
+            password: (string) $validatedData['password'],
+        );
+    }
+
+    /**
+     * Builds a UserCreateDTO from validated self-registration input.
+     * Self-registration always creates a pending Member.
+     *
+     * @param array $validatedData
+     *
+     * @return UserCreateDTO
+     */
+    public function mapToRegisterDTO(array $validatedData): UserCreateDTO
+    {
+        return new UserCreateDTO(
+            name: (string) $validatedData['name'],
+            email: (string) $validatedData['email'],
+            password: (string) $validatedData['password'],
+            image: $validatedData['image'] ?? null,
+            role: UserRole::MEMBER,
+            status: UserStatus::PENDING,
+        );
+    }
     /**
      * Builds a UserCreateDTO from validated input.
      *

@@ -1,21 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\LeadCaptureRequest;
-use App\Jobs\ProcessInboundLead;
+use App\Http\Requests\Lead\LeadCaptureRequest;
+use Core\Lead\Application\Contracts\LeadMapperContract;
+use Core\Lead\Application\Contracts\LeadServiceInterface;
 use Illuminate\Http\JsonResponse;
 
-class LeadCaptureController extends Controller
+/**
+ * Handles lead capture requests.
+ */
+final class LeadCaptureController extends Controller
 {
-    /**
-     * Handle the incoming request.
-     */
+    public function __construct(
+        private readonly LeadMapperContract $mapper,
+        private readonly LeadServiceInterface $leadService,
+    ) {}
+
     public function __invoke(LeadCaptureRequest $request): JsonResponse
     {
-        // ব্যাকগ্রাউন্ড কিউতে পাঠিয়ে দেওয়া
-        ProcessInboundLead::dispatch($request->validated());
+        $dto = $this->mapper->mapToCreateDTO($request->validated());
+        
+        $this->leadService->captureLead($dto);
 
         return response()->json([
             'status'  => 'accepted',

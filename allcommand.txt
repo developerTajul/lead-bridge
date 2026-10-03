@@ -2,29 +2,14 @@
 
 Use the module-scaffolder skill to create the Questions module. Here is the domain schema:
 
-Schema::create('questions', function (Blueprint $table) {
+Schema::create('leads', function (Blueprint $table) {
 $table->id();
-$table->char('content_hash', 64)->unique(); 
-$table->text('question_text');
-$table->string('question_type', 50)->default('single_choice');
-$table->string('difficulty_level', 50)->default('medium');
-$table->text('explanation')->nullable();
-$table->string('study_link')->nullable();
-$table->string('hint_text')->nullable();
-$table->boolean('is_active')->default(true);
-$table->softDeletes(); 
-$table->timestamps();
-$table->index(['difficulty_level', 'is_active']);
-$table->index('question_type');
-});
-Schema::create('question_options', function (Blueprint $table) {
-$table->id();
-$table->foreignId('question_id')->constrained('questions')->onDelete('restrict');
-$table->text('option_text');
-$table->boolean('is_correct')->default(false);
-$table->integer('sort_order')->default(0); 
-$table->index(['question_id', 'sort_order']);
-$table->softDeletes();
+$table->string('name');
+$table->string('email')->nullable()->index();
+$table->string('phone')->nullable()->index();
+$table->string('company_name')->nullable();
+$table->string('status')->default('new')->index();
+$table->string('source')->index();
 $table->timestamps();
 });
 
@@ -32,43 +17,46 @@ $table->timestamps();
 
 Use the form-builder skill to create the Question form with Question module. Here is the schema:
 
-Schema::create('questions', function (Blueprint $table) {
+Schema::create('leads', function (Blueprint $table) {
 $table->id();
-$table->char('content_hash', 64)->unique(); 
-$table->text('question_text');
-$table->string('question_type', 50)->default('single_choice');
-$table->string('difficulty_level', 50)->default('medium');
-$table->text('explanation')->nullable();
-$table->string('study_link')->nullable();
-$table->string('hint_text')->nullable();
-$table->boolean('is_active')->default(true);
-$table->softDeletes(); 
+$table->string('name');
+$table->string('email')->nullable()->index();
+$table->string('phone')->nullable()->index();
+$table->string('company_name')->nullable();
+$table->string('status')->default('new')->index();
+$table->string('source')->index();
 $table->timestamps();
-$table->index(['difficulty_level', 'is_active']);
-$table->index('question_type');
 });
 
 
 
 2.2 Save the Form:
 
-Use the store-action-builder skill to save the questions form for Question module. Here is the schema:
+Use the store-action-builder skill to save the Lead form for Lead module. Here is the schema:
 
-Schema::create('questions', function (Blueprint $table) {
+Schema::create('leads', function (Blueprint $table) {
 $table->id();
-$table->char('content_hash', 64)->unique(); 
-$table->text('question_text');
-$table->string('question_type', 50)->default('single_choice');
-$table->string('difficulty_level', 50)->default('medium');
-$table->text('explanation')->nullable();
-$table->string('study_link')->nullable();
-$table->string('hint_text')->nullable();
-$table->boolean('is_active')->default(true);
-$table->softDeletes(); 
+$table->string('name');
+$table->string('email')->nullable()->index();
+$table->string('phone')->nullable()->index();
+$table->string('company_name')->nullable();
+$table->string('status')->default('new')->index();
+$table->string('source')->index();
 $table->timestamps();
-$table->index(['difficulty_level', 'is_active']);
-$table->index('question_type');
 });
+
+Act as an expert backend software engineer and apply modern architectural best practices. 
+
+Please use the store-action-builder skill to generate a clean, decoupled Action class to persist inbound Lead data for our Lead module.
+
+Database Schema Context:
+Schema::create('leads', function (Blueprint $table) {
+    $table->id();$table->string('name');
+    $table->string('email')->nullable()->index();$table->string('phone')->nullable()->index();
+    $table->string('company_name')->nullable();$table->string('status')->default('new')->index();
+    $table->string('source')->index();$table->timestamps();
+});
+
 
 
 3.1 show DataTable

@@ -46,6 +46,24 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
     }
 
     /**
+     * @param string $email The user email.
+     *
+     * @return UserEntity|null Null when not found.
+     */
+    public function findByEmail(string $email): ?UserEntity
+    {
+        $userModel = $this->model->where('email', $email)->first();
+
+        if (!$userModel) {
+            return null;
+        }
+
+        // toArray() honours $hidden, which excludes the password — the
+        // login use case needs it, so clear the hidden list first.
+        return $this->mapper->toEntity($userModel->setHidden([])->toArray());
+    }
+
+    /**
      * @param int $id The user ID.
      *
      * @return UserEntity|null Null when not found.

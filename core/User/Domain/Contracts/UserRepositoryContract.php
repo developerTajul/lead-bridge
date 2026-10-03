@@ -36,6 +36,15 @@ interface UserRepositoryContract
     public function paginate(int $perPage = 10, ?UserRole $roleFilter = null): PaginatedResult;
 
     /**
+     * Finds a user by email.
+     *
+     * @param string $email The user email.
+     *
+     * @return UserEntity|null Null when not found.
+     */
+    public function findByEmail(string $email): ?UserEntity;
+
+    /**
      * Finds a user by ID.
      *
      * @param int $id The user ID.

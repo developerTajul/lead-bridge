@@ -7,6 +7,7 @@ namespace Core\User\Application\Services;
 use Core\Auth\Domain\Enums\UserRole;
 use Core\Auth\Domain\Enums\UserStatus;
 use Core\User\Application\DTOs\Requests\UserCreateDTO;
+use Core\User\Application\DTOs\Requests\UserLoginDTO;
 use Core\User\Application\DTOs\Requests\UserUpdateDTO;
 use Core\User\Application\Mappers\UserResponseMapper;
 use Core\User\Domain\Contracts\UserRepositoryContract;
@@ -107,6 +108,64 @@ final class UserService
             return Result::failure(
                 message: 'We couldn\'t retrieve the user right now. Please try again.',
                 errorCode: 'USER_FETCH_FAILED',
+            );
+        }
+    }
+
+    /**
+     * Authenticates a user by email and password.
+     * The generic message avoids disclosing whether the email or the
+     * password was wrong (no user enumeration).
+     *
+     * @param UserLoginDTO $userLoginDTO
+     *
+     * @return Result Contains the UserResponseDTO on success.
+     */
+    public function login(UserLoginDTO $userLoginDTO): Result
+    {
+        try {
+            $userEntity = $this->userRepository->findByEmail($userLoginDTO->email);
+
+            if (!$userEntity) {
+                return Result::failure(
+                    message: 'The provided credentials do not match our records.',
+                    errorCode: 'AUTH_INVALID_CREDENTIALS',
+                );
+            }
+
+            if (!$this->passwordHasher->verify($userLoginDTO->password, $userEntity->password)) {
+                return Result::failure(
+                    message: 'The provided credentials do not match our records.',
+                    errorCode: 'AUTH_INVALID_CREDENTIALS',
+                );
+            }
+
+            if ($userEntity->status === UserStatus::PENDING) {
+                return Result::failure(
+                    message: 'Your account is awaiting approval. Please try again later.',
+                    errorCode: 'AUTH_PENDING',
+                );
+            }
+
+            if ($userEntity->status === UserStatus::SUSPENDED) {
+                return Result::failure(
+                    message: 'Your account has been suspended. Contact support for help.',
+                    errorCode: 'AUTH_SUSPENDED',
+                );
+            }
+
+            $responseDTO = $this->mapper->toResponseDTO($userEntity);
+
+            return Result::success(
+                data: $responseDTO,
+                message: 'Logged in successfully.',
+            );
+        } catch (\Throwable $exception) {
+            $this->logger->error('Login attempt failed.', ['exception' => $exception]);
+
+            return Result::failure(
+                message: 'We couldn\'t log you in right now. Please try again.',
+                errorCode: 'AUTH_LOGIN_FAILED',
             );
         }
     }

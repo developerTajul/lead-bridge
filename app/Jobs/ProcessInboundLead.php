@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
-use App\Models\Lead;
+use Core\Lead\Application\Contracts\LeadServiceInterface;
+use Core\Lead\Application\DTOs\Requests\LeadCreateDTO;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -13,24 +16,10 @@ class ProcessInboundLead implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * Create a new job instance.
-     */
-    public function __construct(public array $payload) {}
+    public function __construct(public readonly LeadCreateDTO $dto) {}
 
-    /**
-     * Execute the job.
-     */
-    public function handle(): void
+    public function handle(LeadServiceInterface $leadService): void
     {
-        // ব্যাকগ্রাউন্ডে নিরাপদে লিড তৈরি করা
-        Lead::create([
-            'name'         => $this->payload['name'],
-            'email'        => $this->payload['email'] ?? null,
-            'phone'        => $this->payload['phone'] ?? null,
-            'company_name' => $this->payload['company_name'] ?? null,
-            'source'       => $this->payload['source'] ?? 'api_webhook',
-            'status'       => 'new',
-        ]);
+        $leadService->createLead($this->dto);
     }
 }

@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->string('email')->nullable()->index();
-            $table->string('phone')->nullable()->index();
+            $table->string('email')->unique()->nullable()->index();
+            $table->string('phone')->unique()->nullable()->index();
             $table->string('company_name')->nullable();
             $table->string('status')->default('new')->index();
             $table->string('source')->index();
