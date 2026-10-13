@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Auth\RegisterRequest;
-use App\Http\Requests\UserLoginRequest;
+use App\Http\Requests\Auth\UserLoginRequest;
 use Core\Auth\Application\Contracts\AuthMapperContract;
 use Core\Auth\Application\Services\AuthService;
 use Illuminate\Http\RedirectResponse;
@@ -43,7 +43,7 @@ final class AuthController extends Controller
             return back()->with('error', $result->getMessage())->withInput();
         }
 
-        Auth::loginUsingId($result->getData(), $request->boolean('remember'));
+        Auth::loginUsingId($result->getData()->id, $request->boolean('remember'));
 
         $request->session()->regenerate();
 

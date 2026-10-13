@@ -3,6 +3,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Lead extends Model
 {
@@ -31,4 +33,14 @@ class Lead extends Model
         'status' => 'new',
         'source' => 'website',
     ];
+
+    public function conversion(): HasOne
+    { 
+        return $this->hasOne(LeadConversion::class); 
+    }
+
+    public function activities(): MorphMany
+    {
+        return $this->morphMany(Activity::class, 'trackable')->latest();
+    }
 }

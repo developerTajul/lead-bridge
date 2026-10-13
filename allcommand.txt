@@ -1,61 +1,56 @@
 1. Scaffold a module:
 
-Use the module-scaffolder skill to create the Questions module. Here is the domain schema:
+Use the module-scaffolder skill to create the activities module. Here is the domain schema:
 
-Schema::create('leads', function (Blueprint $table) {
+Schema::create('activities', function (Blueprint $table) {
 $table->id();
-$table->string('name');
-$table->string('email')->nullable()->index();
-$table->string('phone')->nullable()->index();
-$table->string('company_name')->nullable();
-$table->string('status')->default('new')->index();
-$table->string('source')->index();
+$table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+$table->morphs('trackable');
+$table->string('type', 50)->index(); // call, meeting, email, task
+$table->string('subject');
+$table->text('description')->nullable();
+$table->dateTime('due_date')->nullable()->index();
+$table->timestamp('completed_at')->nullable();
 $table->timestamps();
+$table->index(['user_id', 'completed_at']);
 });
 
 2.1 Create a Form:
 
-Use the form-builder skill to create the Question form with Question module. Here is the schema:
+Use the form-builder skill to create the activities form with activities module. Here is the schema:
 
-Schema::create('leads', function (Blueprint $table) {
+Schema::create('activities', function (Blueprint $table) {
 $table->id();
-$table->string('name');
-$table->string('email')->nullable()->index();
-$table->string('phone')->nullable()->index();
-$table->string('company_name')->nullable();
-$table->string('status')->default('new')->index();
-$table->string('source')->index();
+$table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+$table->morphs('trackable');
+$table->string('type', 50)->index(); // call, meeting, email, task
+$table->string('subject');
+$table->text('description')->nullable();
+$table->dateTime('due_date')->nullable()->index();
+$table->timestamp('completed_at')->nullable();
 $table->timestamps();
+$table->index(['user_id', 'completed_at']);
 });
 
 
 
 2.2 Save the Form:
 
-Use the store-action-builder skill to save the Lead form for Lead module. Here is the schema:
+Use the store-action-builder skill to save the activities form for activities module. Here is the schema:
 
-Schema::create('leads', function (Blueprint $table) {
+Schema::create('activities', function (Blueprint $table) {
 $table->id();
-$table->string('name');
-$table->string('email')->nullable()->index();
-$table->string('phone')->nullable()->index();
-$table->string('company_name')->nullable();
-$table->string('status')->default('new')->index();
-$table->string('source')->index();
+$table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+$table->morphs('trackable');
+$table->string('type', 50)->index(); // call, meeting, email, task
+$table->string('subject');
+$table->text('description')->nullable();
+$table->dateTime('due_date')->nullable()->index();
+$table->timestamp('completed_at')->nullable();
 $table->timestamps();
+$table->index(['user_id', 'completed_at']);
 });
 
-Act as an expert backend software engineer and apply modern architectural best practices. 
-
-Please use the store-action-builder skill to generate a clean, decoupled Action class to persist inbound Lead data for our Lead module.
-
-Database Schema Context:
-Schema::create('leads', function (Blueprint $table) {
-    $table->id();$table->string('name');
-    $table->string('email')->nullable()->index();$table->string('phone')->nullable()->index();
-    $table->string('company_name')->nullable();$table->string('status')->default('new')->index();
-    $table->string('source')->index();$table->timestamps();
-});
 
 
 

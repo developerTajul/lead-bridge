@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ActivityController;
 use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
@@ -25,5 +26,6 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('leads', LeadController::class)->only(['store']);
+        Route::resource('activities', ActivityController::class)->only(['index', 'create', 'store']);
     });
 });
