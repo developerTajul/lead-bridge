@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use Core\Auth\Domain\Enums\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 

@@ -6,6 +6,7 @@ namespace Core\Activity\Domain\Contracts;
 
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Domain\DataObjects\ActivityData;
+use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 
@@ -45,4 +46,24 @@ interface ActivityRepositoryContract
      * @return ActivityEntity|null
      */
     public function findById(int $id): ?ActivityEntity;
+
+    /**
+     * Finds an activity by its ID with a row lock, for use inside a transaction.
+     *
+     * @param int $id
+     *
+     * @return ActivityEntity|null
+     */
+    public function findByIdWithLock(int $id): ?ActivityEntity;
+
+    /**
+     * Persists the mutable fields of an activity. The tracked record and the
+     * owning user are never written here.
+     *
+     * @param int                $id
+     * @param ActivityUpdateData $activityUpdateData
+     *
+     * @return ActivityEntity|null Null when the activity no longer exists.
+     */
+    public function update(int $id, ActivityUpdateData $activityUpdateData): ?ActivityEntity;
 }

@@ -7,8 +7,8 @@ namespace Core\Activity\Application\DTOs\Responses;
 readonly class ActivityResponseDTO
 {
     public function __construct(
-        public int $id,
-        public int $user_id,
+        public ?int $id,
+        public ?int $user_id,
         public string $trackable_type,
         public int $trackable_id,
         public string $type,

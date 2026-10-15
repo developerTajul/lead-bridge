@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Application\DTOs\Requests;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 
 /**
  * Immutable data transfer object for creating a user.
@@ -17,8 +17,8 @@ readonly class UserCreateDTO
         public string $email,
         public string $password,
         public mixed $image = null,
-        public UserRole $role = UserRole::MEMBER,
-        public UserStatus $status = UserStatus::PENDING,
+        public AuthRole $role = AuthRole::MEMBER,
+        public AuthStatus $status = AuthStatus::PENDING,
     ) {}
 
     /**

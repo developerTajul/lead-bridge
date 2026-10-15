@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Application\Mappers;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 use Core\User\Application\Contracts\UserMapperContract;
 use Core\User\Application\DTOs\Requests\UserCreateDTO;
 use Core\User\Application\DTOs\Requests\UserLoginDTO;
@@ -48,8 +48,8 @@ final class UserMapper implements UserMapperContract
             email: (string) $validatedData['email'],
             password: (string) $validatedData['password'],
             image: $validatedData['image'] ?? null,
-            role: UserRole::MEMBER,
-            status: UserStatus::PENDING,
+            role: AuthRole::MEMBER,
+            status: AuthStatus::PENDING,
         );
     }
     /**
@@ -66,8 +66,8 @@ final class UserMapper implements UserMapperContract
             email: $validatedData['email'],
             password: $validatedData['password'],
             image: $validatedData['image'] ?? null,
-            role: UserRole::tryFrom((string) $validatedData['role']) ?? UserRole::MEMBER,
-            status: UserStatus::tryFrom((string) $validatedData['status']) ?? UserStatus::PENDING,
+            role: AuthRole::tryFrom((string) $validatedData['role']) ?? AuthRole::MEMBER,
+            status: AuthStatus::tryFrom((string) $validatedData['status']) ?? AuthStatus::PENDING,
         );
     }
 
@@ -87,8 +87,8 @@ final class UserMapper implements UserMapperContract
             email: $validatedData['email'],
             password: $validatedData['password'] ?? null,
             image: $validatedData['image'] ?? null,
-            role: UserRole::tryFrom((string) $validatedData['role']) ?? UserRole::MEMBER,
-            status: UserStatus::tryFrom((string) $validatedData['status']) ?? UserStatus::PENDING,
+            role: AuthRole::tryFrom((string) $validatedData['role']) ?? AuthRole::MEMBER,
+            status: AuthStatus::tryFrom((string) $validatedData['status']) ?? AuthStatus::PENDING,
         );
     }
 }

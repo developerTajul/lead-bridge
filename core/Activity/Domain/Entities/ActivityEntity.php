@@ -8,11 +8,12 @@ use Core\Activity\Domain\Enums\ActivityType;
 use DateTimeImmutable;
 
 /**
- * Pure domain entity representing an activity.
+ * Domain entity representing an activity.
  */
-class ActivityEntity
+final class ActivityEntity
 {
-    // রিলেশন এবং টাইমস্ট্যাম্পের জন্য নতুন প্রোপার্টি
+    // Relations and timestamps stay read-only: they are projection state, not
+    // part of the activity's own business fields.
     private ?array $user = null;
     private ?array $trackable = null;
     private ?DateTimeImmutable $createdAt = null;
@@ -24,14 +25,26 @@ class ActivityEntity
         private readonly int $trackableId,
         private ActivityType $type,
         private string $subject,
-        private ?int $userId = null,
+        private readonly ?int $userId = null,
         private ?string $description = null,
         private ?DateTimeImmutable $dueDate = null,
         private ?DateTimeImmutable $completedAt = null
     ) {}
 
-
-    public static function createNew(        
+    /**
+     * Builds a new, unsaved activity.
+     *
+     * @param string                 $trackableType
+     * @param int                    $trackableId
+     * @param ActivityType           $type
+     * @param string                 $subject
+     * @param int|null               $userId
+     * @param string|null            $description
+     * @param DateTimeImmutable|null $dueDate
+     *
+     * @return self
+     */
+    public static function createNew(
         string $trackableType,
         int $trackableId,
         ActivityType $type,
@@ -53,7 +66,21 @@ class ActivityEntity
         );
     }
 
-
+    /**
+     * Rebuilds an activity from persisted state.
+     *
+     * @param int                    $id
+     * @param string                 $trackableType
+     * @param int                    $trackableId
+     * @param ActivityType           $type
+     * @param string                 $subject
+     * @param int|null               $userId
+     * @param string|null            $description
+     * @param DateTimeImmutable|null $dueDate
+     * @param DateTimeImmutable|null $completedAt
+     *
+     * @return self
+     */
     public static function reconstitute(
         int $id,
         string $trackableType,
@@ -64,7 +91,7 @@ class ActivityEntity
         ?string $description = null,
         ?DateTimeImmutable $dueDate = null,
         ?DateTimeImmutable $completedAt = null
-    ):self
+    ): self
     {
         return new self(
             id: $id,
@@ -79,94 +106,162 @@ class ActivityEntity
         );
     }
 
+    /**
+     * Applies new details to the activity. Only arguments that are not null
+     * are applied; null means "leave unchanged". An empty subject is ignored
+     * because an activity must always carry one.
+     *
+     * @param string|null            $subject
+     * @param ActivityType|null      $type
+     * @param string|null            $description
+     * @param DateTimeImmutable|null $dueDate
+     *
+     * @return void
+     */
+    public function updateDetails(
+        ?string $subject = null,
+        ?ActivityType $type = null,
+        ?string $description = null,
+        ?DateTimeImmutable $dueDate = null
+    ): void {
+        if ($subject !== null && $subject !== '') {
+            $this->subject = $subject;
+        }
 
+        if ($type !== null) {
+            $this->type = $type;
+        }
 
-    public function getId(): ?int 
-    { 
-        return $this->id; 
+        if ($description !== null) {
+            $this->description = $description;
+        }
+
+        if ($dueDate !== null) {
+            $this->dueDate = $dueDate;
+        }
     }
 
-    public function getTrackableType(): string 
-    { 
-        return $this->trackableType; 
-    }
-
-    public function getTrackableId(): int 
-    { 
-        return $this->trackableId; 
-    }
-
-    public function getType(): ActivityType 
-    { 
-        return $this->type; 
-    }
-
-    public function getSubject(): string 
-    { 
-        return $this->subject; 
-    }
-
-    public function getUserId(): ?int 
-    { 
-        return $this->userId; 
-    }
-
-    public function getDescription(): ?string 
-    { 
-        return $this->description; 
-    }
-
-    public function getDueDate(): ?DateTimeImmutable 
-    { 
-        return $this->dueDate; 
-    }
-
-    public function getCompletedAt(): ?DateTimeImmutable 
-    { 
-        return $this->completedAt; 
-    }
-
-    // --- নতুন যুক্ত করা Getter মেথডসমূহ ---
-
-    public function getUser(): ?array 
-    { 
-        return $this->user; 
-    }
-
-    public function getTrackable(): ?array 
-    { 
-        return $this->trackable; 
-    }
-
-    public function getCreatedAt(): ?DateTimeImmutable 
-    { 
-        return $this->createdAt; 
-    }
-
-    public function getUpdatedAt(): ?DateTimeImmutable 
-    { 
-        return $this->updatedAt; 
-    }
-
-    // --- নতুন যুক্ত করা Setter মেথডসমূহ ---
-
-    public function setUser(?array $user): void 
+    /**
+     * Marks the activity as completed at the given moment.
+     *
+     * @param DateTimeImmutable $completedAt
+     *
+     * @return void
+     */
+    public function markCompleted(DateTimeImmutable $completedAt): void
     {
-        $this->user = $user;
+        $this->completedAt = $completedAt;
     }
 
-    public function setTrackable(?array $trackable): void 
+    /**
+     * Clears the completion marker, putting the activity back to pending.
+     *
+     * @return void
+     */
+    public function reopen(): void
     {
-        $this->trackable = $trackable;
+        $this->completedAt = null;
     }
 
-    public function setCreatedAt(?DateTimeImmutable $createdAt): void 
+    /**
+     * Whether the activity is still awaiting completion.
+     *
+     * @return bool
+     */
+    public function isPending(): bool
     {
-        $this->createdAt = $createdAt;
+        return $this->completedAt === null;
     }
 
-    public function setUpdatedAt(?DateTimeImmutable $updatedAt): void 
+    public function getId(): ?int
     {
-        $this->updatedAt = $updatedAt;
+        return $this->id;
+    }
+
+    public function getTrackableType(): string
+    {
+        return $this->trackableType;
+    }
+
+    public function getTrackableId(): int
+    {
+        return $this->trackableId;
+    }
+
+    public function getType(): ActivityType
+    {
+        return $this->type;
+    }
+
+    public function getSubject(): string
+    {
+        return $this->subject;
+    }
+
+    public function getUserId(): ?int
+    {
+        return $this->userId;
+    }
+
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function getDueDate(): ?DateTimeImmutable
+    {
+        return $this->dueDate;
+    }
+
+    public function getCompletedAt(): ?DateTimeImmutable
+    {
+        return $this->completedAt;
+    }
+
+    public function getUser(): ?array
+    {
+        return $this->user;
+    }
+
+    public function getTrackable(): ?array
+    {
+        return $this->trackable;
+    }
+
+    public function getCreatedAt(): ?DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getUpdatedAt(): ?DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    /**
+     * Returns a new instance carrying the given relations and timestamps.
+     * Projection state only - the activity's own fields are untouched.
+     *
+     * @param array|null             $user
+     * @param array|null             $trackable
+     * @param DateTimeImmutable|null $createdAt
+     * @param DateTimeImmutable|null $updatedAt
+     *
+     * @return self
+     */
+    public function withProjection(
+        ?array $user = null,
+        ?array $trackable = null,
+        ?DateTimeImmutable $createdAt = null,
+        ?DateTimeImmutable $updatedAt = null
+    ): self {
+        $clone = clone $this;
+
+        $clone->user = $user;
+        $clone->trackable = $trackable;
+        $clone->createdAt = $createdAt;
+        $clone->updatedAt = $updatedAt;
+
+        return $clone;
     }
 }

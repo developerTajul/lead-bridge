@@ -8,6 +8,7 @@ use App\Models\Activity;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\DataObjects\ActivityData;
+use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Infrastructure\Mappers\ActivityEntityMapper;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -131,14 +132,55 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
 
     public function findById(int $id): ?ActivityEntity
     {
-        // কন্ট্রোলারের ইলোকুয়েন্ট কুয়েরি এখানে চলে আসলো
         $activityModel = Activity::with(['user', 'trackable'])->find($id);
 
         if (! $activityModel) {
             return null;
         }
 
-        // মডেলকে ডোমেইন এন্টিটিতে ম্যাপ করে রিটার্ন করা হচ্ছে
+        return $this->mapper->toEntity($activityModel->toArray());
+    }
+
+    /**
+     * @param int $id
+     *
+     * @return ActivityEntity|null
+     */
+    public function findByIdWithLock(int $id): ?ActivityEntity
+    {
+        $activityModel = $this->findRecordForUpdate($id);
+
+        if (! $activityModel) {
+            return null;
+        }
+
+        return $this->mapper->toEntity($activityModel->toArray());
+    }
+
+    /**
+     * @param int                $id
+     * @param ActivityUpdateData $activityUpdateData
+     *
+     * @return ActivityEntity|null Null when the activity no longer exists.
+     */
+    public function update(int $id, ActivityUpdateData $activityUpdateData): ?ActivityEntity
+    {
+        $activityModel = $this->findRecord($id);
+
+        if (! $activityModel) {
+            return null;
+        }
+
+        // Only the mutable columns are written; the tracked record and the
+        // owning user are left exactly as they were.
+        $activityModel->subject = $activityUpdateData->subject;
+        $activityModel->type = $activityUpdateData->type?->value;
+        $activityModel->description = $activityUpdateData->description;
+        $activityModel->due_date = $activityUpdateData->dueDate;
+        $activityModel->completed_at = $activityUpdateData->completedAt;
+
+        $activityModel->save();
+
         return $this->mapper->toEntity($activityModel->toArray());
     }
 }

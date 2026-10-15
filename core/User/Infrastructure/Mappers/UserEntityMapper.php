@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Infrastructure\Mappers;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 use Core\User\Domain\Entities\UserEntity;
 
 /** Maps model arrays to UserEntity. */
@@ -20,8 +20,8 @@ final class UserEntityMapper
             emailVerifiedAt: $data['email_verified_at'] ?? null,
             password: (string) ($data['password'] ?? ''),
             image: $data['image'] ?? null,
-            role: UserRole::tryFrom((string) $data['role']) ?? UserRole::MEMBER,
-            status: UserStatus::tryFrom((string) $data['status']) ?? UserStatus::PENDING,
+            role: AuthRole::tryFrom((string) $data['role']) ?? AuthRole::MEMBER,
+            status: AuthStatus::tryFrom((string) $data['status']) ?? AuthStatus::PENDING,
             rememberToken: $data['remember_token'] ?? null,
             createdAt: (string) $data['created_at'],
             updatedAt: (string) $data['updated_at'],

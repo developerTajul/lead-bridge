@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Application\Services;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 use Core\User\Application\DTOs\Requests\UserCreateDTO;
 use Core\User\Application\DTOs\Requests\UserLoginDTO;
 use Core\User\Application\DTOs\Requests\UserUpdateDTO;
@@ -44,23 +44,16 @@ final class UserService
     ) {}
 
     /**
-     * Returns a paginated list of users, scoped by the requester's role.
+     * Returns a paginated list of users.
      *
-     * Librarians see Members only; Admins see all roles.
-     *
-     * @param int      $perPage         Items per page (default: 10).
-     * @param UserRole $requestedByRole Role of the authenticated requester.
+     * @param int $perPage Items per page (default: 10).
      *
      * @return Result Contains a PaginatedResult of UserResponseDTO on success.
      */
-    public function getUsers(int $perPage = 10, UserRole $requestedByRole): Result
+    public function getUsers(int $perPage = 10): Result
     {
         try {
-            $roleFilter = $requestedByRole === UserRole::LIBRARIAN
-                ? UserRole::MEMBER
-                : null;
-
-            $paginatedEntities = $this->userRepository->paginate($perPage, $roleFilter);
+            $paginatedEntities = $this->userRepository->paginate($perPage);
 
             $paginatedResponse = $paginatedEntities->map(
                 fn(\Core\User\Domain\Entities\UserEntity $entity) => $this->mapper->toResponseDTO($entity),
@@ -140,14 +133,14 @@ final class UserService
                 );
             }
 
-            if ($userEntity->status === UserStatus::PENDING) {
+            if ($userEntity->status === AuthStatus::PENDING) {
                 return Result::failure(
                     message: 'Your account is awaiting approval. Please try again later.',
                     errorCode: 'AUTH_PENDING',
                 );
             }
 
-            if ($userEntity->status === UserStatus::SUSPENDED) {
+            if ($userEntity->status === AuthStatus::SUSPENDED) {
                 return Result::failure(
                     message: 'Your account has been suspended. Contact support for help.',
                     errorCode: 'AUTH_SUSPENDED',
@@ -274,11 +267,11 @@ final class UserService
      * Updates a user's account status (approve or suspend).
      *
      * @param int        $id     The user ID.
-     * @param UserStatus $status The new account status.
+     * @param AuthStatus $status The new account status.
      *
      * @return Result Contains the UserResponseDTO on success.
      */
-    public function updateUserStatus(int $id, UserStatus $status): Result
+    public function updateUserStatus(int $id, AuthStatus $status): Result
     {
         try {
             $this->transactionManager->beginTransaction();

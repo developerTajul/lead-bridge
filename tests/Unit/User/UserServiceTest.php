@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\User;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\FileUploaderContract;
 use Core\Shared\Domain\Contracts\PasswordHasherContract;
@@ -53,7 +53,7 @@ final class UserServiceTest extends TestCase
 
     public function test_login_succeeds_for_approved_user_with_valid_password(): void
     {
-        $userEntity = $this->makeEntity(status: UserStatus::APPROVED);
+        $userEntity = $this->makeEntity(status: AuthStatus::APPROVED);
 
         $this->userRepository->method('findByEmail')->willReturn($userEntity);
         $this->passwordHasher->method('verify')->willReturn(true);
@@ -83,7 +83,7 @@ final class UserServiceTest extends TestCase
 
     public function test_login_fails_with_invalid_credentials_on_wrong_password(): void
     {
-        $userEntity = $this->makeEntity(status: UserStatus::APPROVED);
+        $userEntity = $this->makeEntity(status: AuthStatus::APPROVED);
 
         $this->userRepository->method('findByEmail')->willReturn($userEntity);
         $this->passwordHasher->method('verify')->willReturn(false);
@@ -99,7 +99,7 @@ final class UserServiceTest extends TestCase
 
     public function test_login_fails_with_pending_error_for_pending_user(): void
     {
-        $userEntity = $this->makeEntity(status: UserStatus::PENDING);
+        $userEntity = $this->makeEntity(status: AuthStatus::PENDING);
 
         $this->userRepository->method('findByEmail')->willReturn($userEntity);
         $this->passwordHasher->method('verify')->willReturn(true);
@@ -115,7 +115,7 @@ final class UserServiceTest extends TestCase
 
     public function test_login_fails_with_suspended_error_for_suspended_user(): void
     {
-        $userEntity = $this->makeEntity(status: UserStatus::SUSPENDED);
+        $userEntity = $this->makeEntity(status: AuthStatus::SUSPENDED);
 
         $this->userRepository->method('findByEmail')->willReturn($userEntity);
         $this->passwordHasher->method('verify')->willReturn(true);
@@ -129,7 +129,7 @@ final class UserServiceTest extends TestCase
         $this->assertSame('AUTH_SUSPENDED', $result->errorCode);
     }
 
-    private function makeEntity(UserStatus $status): UserEntity
+    private function makeEntity(AuthStatus $status): UserEntity
     {
         return new UserEntity(
             id: 1,
@@ -138,7 +138,7 @@ final class UserServiceTest extends TestCase
             emailVerifiedAt: null,
             password: 'hashed-password',
             image: null,
-            role: UserRole::MEMBER,
+            role: AuthRole::MEMBER,
             status: $status,
             rememberToken: null,
             createdAt: '2026-09-30 10:00:00',

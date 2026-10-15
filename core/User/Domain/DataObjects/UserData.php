@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Domain\DataObjects;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 
 /**
  * Immutable data object for creating or updating a user.
@@ -17,8 +17,8 @@ readonly class UserData
         public string $email,
         public string $password,
         public ?string $image = null,
-        public UserRole $role = UserRole::MEMBER,
-        public UserStatus $status = UserStatus::PENDING,
+        public AuthRole $role = AuthRole::MEMBER,
+        public AuthStatus $status = AuthStatus::PENDING,
     ) {}
 
     /**

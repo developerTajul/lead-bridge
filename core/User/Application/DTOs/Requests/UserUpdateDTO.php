@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Application\DTOs\Requests;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 
 /**
  * Immutable data transfer object for updating a user.
@@ -18,8 +18,8 @@ readonly class UserUpdateDTO
         public string $email,
         public mixed $password = null,
         public mixed $image = null,
-        public UserRole $role,
-        public UserStatus $status,
+        public AuthRole $role,
+        public AuthStatus $status,
     ) {}
 
     /**

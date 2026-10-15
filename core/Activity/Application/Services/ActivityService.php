@@ -6,9 +6,11 @@ namespace Core\Activity\Application\Services;
 
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
+use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\DataObjects\ActivityData;
+use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Events\ActivityCreatedEvent;
 use Core\Shared\Application\DTOs\Result;
@@ -151,4 +153,85 @@ final class ActivityService
     }
 
 
+    /**
+     * Updates an existing activity inside a transaction.
+     *
+     * @param ActivityUpdateDTO $activityUpdateDTO
+     *
+     * @return Result Contains the ActivityResponseDTO on success.
+     */
+    public function update(ActivityUpdateDTO $activityUpdateDTO): Result
+    {
+        try {
+            $this->transactionManager->beginTransaction();
+
+            // Row-level lock: the entity read here is the one we mutate and save.
+            $activityEntity = $this->activityRepository->findByIdWithLock($activityUpdateDTO->id);
+
+            if (! $activityEntity) {
+                $this->transactionManager->rollback();
+
+                return Result::failure(
+                    message: "Activity not found with ID: {$activityUpdateDTO->id}",
+                    errorCode: 'ACTIVITY_NOT_FOUND',
+                );
+            }
+
+            // Tell the entity to mutate itself; it guards its own invariants.
+            $activityEntity->updateDetails(
+                subject: $activityUpdateDTO->subject,
+                type: $activityUpdateDTO->type,
+                description: $activityUpdateDTO->description,
+                dueDate: $activityUpdateDTO->dueDate !== null
+                    ? new \DateTimeImmutable($activityUpdateDTO->dueDate)
+                    : null,
+            );
+
+            if ($activityUpdateDTO->completedAt !== null) {
+                $activityEntity->markCompleted(new \DateTimeImmutable($activityUpdateDTO->completedAt));
+            }
+
+            // The repository persists only the mutable columns.
+            $activityUpdateData = new ActivityUpdateData(
+                subject: $activityEntity->getSubject(),
+                type: $activityEntity->getType(),
+                description: $activityEntity->getDescription(),
+                dueDate: $activityEntity->getDueDate()?->format('Y-m-d H:i:s'),
+                completedAt: $activityEntity->getCompletedAt()?->format('Y-m-d H:i:s'),
+            );
+
+            $updatedActivity = $this->activityRepository->update($activityUpdateDTO->id, $activityUpdateData);
+
+            if (! $updatedActivity) {
+                $this->transactionManager->rollback();
+
+                return Result::failure(
+                    message: "Activity not found with ID: {$activityUpdateDTO->id}",
+                    errorCode: 'ACTIVITY_NOT_FOUND',
+                );
+            }
+
+            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($updatedActivity);
+
+            $this->transactionManager->commit();
+
+            return Result::success(
+                data: $activityResponseDTO,
+                message: 'Activity updated successfully.',
+            );
+        } catch (\Throwable $exception) {
+            $this->transactionManager->rollback();
+
+            $this->logger->error('Activity update failed.', [
+                'id' => $activityUpdateDTO->id,
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            return Result::failure(
+                message: 'Failed to update the activity. Please try again.',
+                errorCode: 'ACTIVITY_UPDATE_FAILED',
+            );
+        }
+    }
 }

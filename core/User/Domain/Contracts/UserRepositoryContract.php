@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Core\User\Domain\Contracts;
 
-use Core\Auth\Domain\Enums\UserRole;
-use Core\Auth\Domain\Enums\UserStatus;
+use Core\Auth\Domain\Enums\AuthRole;
+use Core\Auth\Domain\Enums\AuthStatus;
 use Core\User\Domain\DataObjects\UserData;
 use Core\User\Domain\Entities\UserEntity;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -29,11 +29,11 @@ interface UserRepositoryContract
      * Returns a paginated list of users, optionally restricted to one role.
      *
      * @param int           $perPage    Items per page (default: 10).
-     * @param UserRole|null $roleFilter Restrict results to this role; null returns all roles.
+     * @param AuthRole|null $roleFilter Restrict results to this role; null returns all roles.
      *
      * @return PaginatedResult
      */
-    public function paginate(int $perPage = 10, ?UserRole $roleFilter = null): PaginatedResult;
+    public function paginate(int $perPage = 10, ?AuthRole $roleFilter = null): PaginatedResult;
 
     /**
      * Finds a user by email.
@@ -76,11 +76,11 @@ interface UserRepositoryContract
      * Updates only the account status of a user.
      *
      * @param int        $id     The user ID.
-     * @param UserStatus $status The new account status.
+     * @param AuthStatus $status The new account status.
      *
      * @return UserEntity|null Null when not found.
      */
-    public function updateStatus(int $id, UserStatus $status): ?UserEntity;
+    public function updateStatus(int $id, AuthStatus $status): ?UserEntity;
 
     /**
      * Deletes a user by ID.
