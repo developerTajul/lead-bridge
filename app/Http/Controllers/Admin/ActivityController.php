@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ActivityStoreRequest;
 use Core\Activity\Application\Contracts\ActivityMapperContract;
+use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Services\ActivityService;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,10 @@ use Illuminate\View\View;
  */
 final class ActivityController extends Controller
 {
+    private const DEFAULT_PER_PAGE = 10;
+
+    private const MAX_PER_PAGE = 100;
+
     public function __construct(
         private readonly ActivityService $activities,
         private readonly ActivityMapperContract $mapper,
@@ -32,9 +37,17 @@ final class ActivityController extends Controller
      */
     public function index(Request $request): View
     {
-        $perPage = min((int) $request->input('per_page', 10), 100);
+        $perPage = min((int) $request->input('per_page', self::DEFAULT_PER_PAGE), self::MAX_PER_PAGE);
 
-        $result = $this->activities->getActivities($perPage);
+        $filterDTO = new ActivityFilterDTO(
+            status: $request->input('status'),
+            type: $request->input('type'),
+            userId: $request->filled('user_id') ? $request->integer('user_id') : null,
+            filter: $request->input('filter'),
+            perPage: $perPage
+        );
+
+        $result = $this->activities->getActivities($filterDTO);
 
         if ($result->isFailure()) {
             return view('admin.activities.index', [
@@ -79,7 +92,7 @@ final class ActivityController extends Controller
     public function store(ActivityStoreRequest $request): RedirectResponse
     {
         $activityCreateDTO = $this->mapper->mapToCreateDTO($request->validated());
-        $result = $this->activities->createActivity($activityCreateDTO);
+        $result = $this->activities->create($activityCreateDTO);
 
         if ($result->isFailure()) {
             return back()->with('error', $result->getMessage())->withInput();
