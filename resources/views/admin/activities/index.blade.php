@@ -73,13 +73,13 @@
                                     </span>
                                 </td>
                                 <td class="px-6 py-3 text-xs text-gray-500">
-                                    {{ class_basename($activity->trackableType) }} #{{ $activity->trackableId }}
+                                    {{ class_basename($activity->trackable_type) }} #{{ $activity->trackable_id }}
                                 </td>
                                 <td class="px-6 py-3 text-xs text-gray-500">
-                                    {{ $activity->dueDate ?? '—' }}
+                                    {{ $activity->due_date ?? '—' }}
                                 </td>
                                 <td class="px-6 py-3">
-                                    @if ($activity->completedAt)
+                                    @if ($activity->completed_at)
                                         <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Completed</span>
                                     @else
                                         <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">Open</span>
