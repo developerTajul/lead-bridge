@@ -11,6 +11,7 @@ use Core\Activity\Application\Services\ActivityService;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -85,22 +86,50 @@ final class ActivityIndexTest extends TestCase
         $this->assertNull($firstItem->completed_at);
     }
 
-    public function test_index_passes_the_filter_dto_to_the_repository(): void
+    public function test_index_maps_the_filter_dto_onto_the_domain_criteria(): void
     {
-        $filterDTO = new ActivityFilterDTO(
+        $captured = null;
+        $this->activityRepository->expects($this->once())
+            ->method('getFilteredActivities')
+            ->willReturnCallback(function (ActivityFilter $filter) use (&$captured) {
+                $captured = $filter;
+
+                return $this->makePaginatedResult();
+            });
+
+        $this->activityService->getActivities(new ActivityFilterDTO(
             status: 'pending',
             type: 'call',
             userId: 7,
             filter: 'today',
             perPage: 25,
-        );
+        ));
 
-        $this->activityRepository->expects($this->once())
-            ->method('getFilteredActivities')
-            ->with($filterDTO)
-            ->willReturn($this->makePaginatedResult());
+        $this->assertNotNull($captured);
+        $this->assertSame('pending', $captured->status);
+        $this->assertSame('call', $captured->type);
+        $this->assertSame(7, $captured->userId);
+        $this->assertSame('today', $captured->period);
+        $this->assertSame(25, $captured->perPage);
+    }
 
-        $this->activityService->getActivities($filterDTO);
+    public function test_index_defaults_the_domain_criteria_when_the_dto_is_empty(): void
+    {
+        $captured = null;
+        $this->activityRepository->method('getFilteredActivities')
+            ->willReturnCallback(function (ActivityFilter $filter) use (&$captured) {
+                $captured = $filter;
+
+                return $this->makePaginatedResult();
+            });
+
+        $this->activityService->getActivities(new ActivityFilterDTO());
+
+        $this->assertNull($captured->status);
+        $this->assertNull($captured->type);
+        $this->assertNull($captured->userId);
+        $this->assertNull($captured->period);
+        $this->assertSame(15, $captured->perPage);
     }
 
     public function test_index_returns_failure_when_repository_throws(): void

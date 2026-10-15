@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Core\Activity\Domain\Entities;
 
 use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use DateTimeImmutable;
 
 /**
@@ -41,8 +42,11 @@ final class ActivityEntity
      * @param int|null               $userId
      * @param string|null            $description
      * @param DateTimeImmutable|null $dueDate
+     * @param DateTimeImmutable|null $completedAt
      *
      * @return self
+     *
+     * @throws InvalidActivityException When the subject or the tracked record is missing.
      */
     public static function createNew(
         string $trackableType,
@@ -51,9 +55,22 @@ final class ActivityEntity
         string $subject,
         ?int $userId = null,
         ?string $description = null,
-        ?DateTimeImmutable $dueDate = null
+        ?DateTimeImmutable $dueDate = null,
+        ?DateTimeImmutable $completedAt = null
     ): self
     {
+        if (trim($subject) === '') {
+            throw InvalidActivityException::emptySubject();
+        }
+
+        if ($trackableId <= 0) {
+            throw InvalidActivityException::invalidTrackableId($trackableId);
+        }
+
+        if (trim($trackableType) === '') {
+            throw InvalidActivityException::emptyTrackableType();
+        }
+
         return new self(
             id: null,
             trackableType: $trackableType,
@@ -62,7 +79,8 @@ final class ActivityEntity
             subject: $subject,
             userId: $userId,
             description: $description,
-            dueDate: $dueDate
+            dueDate: $dueDate,
+            completedAt: $completedAt
         );
     }
 
@@ -108,8 +126,7 @@ final class ActivityEntity
 
     /**
      * Applies new details to the activity. Only arguments that are not null
-     * are applied; null means "leave unchanged". An empty subject is ignored
-     * because an activity must always carry one.
+     * are applied; null means "leave unchanged".
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
@@ -117,6 +134,8 @@ final class ActivityEntity
      * @param DateTimeImmutable|null $dueDate
      *
      * @return void
+     *
+     * @throws InvalidActivityException When an empty subject is supplied.
      */
     public function updateDetails(
         ?string $subject = null,
@@ -124,7 +143,11 @@ final class ActivityEntity
         ?string $description = null,
         ?DateTimeImmutable $dueDate = null
     ): void {
-        if ($subject !== null && $subject !== '') {
+        if ($subject !== null && trim($subject) === '') {
+            throw InvalidActivityException::emptySubject();
+        }
+
+        if ($subject !== null) {
             $this->subject = $subject;
         }
 
@@ -144,12 +167,25 @@ final class ActivityEntity
     /**
      * Marks the activity as completed at the given moment.
      *
-     * @param DateTimeImmutable $completedAt
+     * @param DateTimeImmutable      $completedAt
+     * @param DateTimeImmutable|null $now Clock to compare against; defaults to the current time.
      *
      * @return void
+     *
+     * @throws InvalidActivityException When the activity is already completed or the moment lies ahead.
      */
-    public function markCompleted(DateTimeImmutable $completedAt): void
+    public function markCompleted(DateTimeImmutable $completedAt, ?DateTimeImmutable $now = null): void
     {
+        if (! $this->isPending()) {
+            throw InvalidActivityException::alreadyCompleted();
+        }
+
+        $now ??= new DateTimeImmutable();
+
+        if ($completedAt > $now) {
+            throw InvalidActivityException::completionInTheFuture($completedAt, $now);
+        }
+
         $this->completedAt = $completedAt;
     }
 

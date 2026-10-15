@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\Contracts;
 
-use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
-use Core\Activity\Domain\DataObjects\ActivityData;
-use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 
 /**
@@ -16,13 +14,14 @@ use Core\Shared\Domain\DataObjects\PaginatedResult;
 interface ActivityRepositoryContract
 {
     /**
-     * Creates a new activity and returns it as a Domain Entity.
+     * Persists the activity. An entity without an ID is inserted, one that
+     * already carries an ID is updated in place.
      *
-     * @param ActivityData $activityData
+     * @param ActivityEntity $activity
      *
      * @return ActivityEntity
      */
-    public function create(ActivityData $activityData): ActivityEntity;
+    public function save(ActivityEntity $activity): ActivityEntity;
 
     /**
      * Returns a paginated list of activities.
@@ -34,15 +33,19 @@ interface ActivityRepositoryContract
     public function paginate(int $perPage = 10): PaginatedResult;
 
     /**
-     * DTO ব্যবহার করে ফিল্টার করা অ্যাক্টিভিটি লিস্ট নিয়ে আসবে
+     * Returns the activities matching the given filter criteria.
+     *
+     * @param ActivityFilter $filter
+     *
+     * @return PaginatedResult
      */
-    public function getFilteredActivities(ActivityFilterDTO $filterDTO): PaginatedResult;
-
+    public function getFilteredActivities(ActivityFilter $filter): PaginatedResult;
 
     /**
      * Finds an activity by its ID.
      *
      * @param int $id
+     *
      * @return ActivityEntity|null
      */
     public function findById(int $id): ?ActivityEntity;
@@ -55,17 +58,6 @@ interface ActivityRepositoryContract
      * @return ActivityEntity|null
      */
     public function findByIdWithLock(int $id): ?ActivityEntity;
-
-    /**
-     * Persists the mutable fields of an activity. The tracked record and the
-     * owning user are never written here.
-     *
-     * @param int                $id
-     * @param ActivityUpdateData $activityUpdateData
-     *
-     * @return ActivityEntity|null Null when the activity no longer exists.
-     */
-    public function update(int $id, ActivityUpdateData $activityUpdateData): ?ActivityEntity;
 
     /**
      * Deletes an activity.

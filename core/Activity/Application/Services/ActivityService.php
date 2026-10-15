@@ -9,11 +9,10 @@ use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
-use Core\Activity\Domain\DataObjects\ActivityData;
-use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Events\ActivityCreatedEvent;
 use Core\Activity\Domain\Events\ActivityDeletedEvent;
+use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
@@ -44,28 +43,18 @@ final class ActivityService
         try {
             $this->transactionManager->beginTransaction();
 
-            $activityEntity = ActivityEntity::createNew(                
+            $activityEntity = ActivityEntity::createNew(
                 trackableType: $activityCreateDTO->trackableType,
                 trackableId: $activityCreateDTO->trackableId,
                 type: $activityCreateDTO->type,
                 subject: $activityCreateDTO->subject,
                 userId: $activityCreateDTO->userId,
                 description: $activityCreateDTO->description,
-                dueDate: $activityCreateDTO->dueDate ? new \DateTimeImmutable($activityCreateDTO->dueDate) : null
+                dueDate: $activityCreateDTO->dueDate ? new \DateTimeImmutable($activityCreateDTO->dueDate) : null,
+                completedAt: $activityCreateDTO->completedAt ? new \DateTimeImmutable($activityCreateDTO->completedAt) : null
             );
 
-            $activityData = new ActivityData(
-                trackableType: $activityEntity->getTrackableType(),
-                trackableId: $activityEntity->getTrackableId(),
-                type: $activityEntity->getType(),
-                subject: $activityEntity->getSubject(),
-                userId: $activityEntity->getUserId(),
-                description: $activityEntity->getDescription(),
-                dueDate: $activityEntity->getDueDate()?->format('Y-m-d H:i:s'),
-                completedAt: $activityEntity->getCompletedAt()?->format('Y-m-d H:i:s'),
-            );
-
-            $savedEntity = $this->activityRepository->create( $activityData );
+            $savedEntity = $this->activityRepository->save($activityEntity);
 
             $activityResponseDTO = $this->activityResponseMapper->toResponseDTO( $savedEntity );
 
@@ -100,15 +89,24 @@ final class ActivityService
     public function getActivities(ActivityFilterDTO $filterDTO): Result
     {
         try {
-            // ১. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে ActivityEntity আছে)
-            $paginatedActivities = $this->activityRepository->getFilteredActivities($filterDTO);
+            // ১. Application DTO থেকে Domain criteria বানানো
+            $activityFilter = new ActivityFilter(
+                status: $filterDTO->status,
+                type: $filterDTO->type,
+                userId: $filterDTO->userId,
+                period: $filterDTO->filter,
+                perPage: $filterDTO->perPage
+            );
 
-            // ২. ভেতরের Entity গুলোকে ActivityResponseDTO তে রূপান্তর করা
+            // ২. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে ActivityEntity আছে)
+            $paginatedActivities = $this->activityRepository->getFilteredActivities($activityFilter);
+
+            // ৩. ভেতরের Entity গুলোকে ActivityResponseDTO তে রূপান্তর করা
             $mappedItems = collect($paginatedActivities->items)
-                ->map(fn($entity) => $this->activityResponseMapper->toResponseDTO($entity))
+                ->map(fn(ActivityEntity $entity) => $this->activityResponseMapper->toResponseDTO($entity))
                 ->all();
 
-            // ৩. ম্যাপ করা ডাটা দিয়ে নতুন একটি PaginatedResult তৈরি করা
+            // ৪. ম্যাপ করা ডাটা দিয়ে নতুন একটি PaginatedResult তৈরি করা
             $mappedPaginatedResult = new \Core\Shared\Domain\DataObjects\PaginatedResult(
                 items: $mappedItems,
                 total: $paginatedActivities->total,
@@ -191,25 +189,8 @@ final class ActivityService
                 $activityEntity->markCompleted(new \DateTimeImmutable($activityUpdateDTO->completedAt));
             }
 
-            // The repository persists only the mutable columns.
-            $activityUpdateData = new ActivityUpdateData(
-                subject: $activityEntity->getSubject(),
-                type: $activityEntity->getType(),
-                description: $activityEntity->getDescription(),
-                dueDate: $activityEntity->getDueDate()?->format('Y-m-d H:i:s'),
-                completedAt: $activityEntity->getCompletedAt()?->format('Y-m-d H:i:s'),
-            );
-
-            $updatedActivity = $this->activityRepository->update($activityUpdateDTO->id, $activityUpdateData);
-
-            if (! $updatedActivity) {
-                $this->transactionManager->rollback();
-
-                return Result::failure(
-                    message: "Activity not found with ID: {$activityUpdateDTO->id}",
-                    errorCode: 'ACTIVITY_NOT_FOUND',
-                );
-            }
+            // The mutated entity is handed straight to the repository.
+            $updatedActivity = $this->activityRepository->save($activityEntity);
 
             $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($updatedActivity);
 

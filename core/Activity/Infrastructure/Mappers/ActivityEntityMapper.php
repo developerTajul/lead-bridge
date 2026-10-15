@@ -18,7 +18,7 @@ final class ActivityEntityMapper
             id: (int) $data['id'],
             trackableType: (string) $data['trackable_type'],
             trackableId: (int) $data['trackable_id'],
-            type: ActivityType::tryFrom((string) $data['type']) ?? ActivityType::TASK,
+            type: ActivityType::from((string) $data['type']),
             subject: (string) $data['subject'],
             userId: isset($data['user_id']) ? (int) $data['user_id'] : null,
             description: $data['description'] ?? null,

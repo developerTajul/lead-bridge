@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Core\Activity\Infrastructure\Repositories;
 
 use App\Models\Activity;
-use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
-use Core\Activity\Domain\DataObjects\ActivityData;
-use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Activity\Infrastructure\Mappers\ActivityEntityMapper;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Core\Shared\Infrastructure\Repositories\BaseRepository;
+use RuntimeException;
 
 /**
  * Eloquent-backed persistence for activities. The only place in the module
@@ -34,24 +33,28 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     }
 
     /**
-     * @param ActivityData $activityData
+     * Persists the entity, inserting it when it has no ID yet.
+     *
+     * @param ActivityEntity $activity
      *
      * @return ActivityEntity
+     *
+     * @throws RuntimeException When the entity carries an ID that no longer exists.
      */
-    public function create(ActivityData $activityData): ActivityEntity
+    public function save(ActivityEntity $activity): ActivityEntity
     {
-        // $activityModel = $this->createRecord( $activityData->toArray() );
+        $activityModel = $activity->getId() === null
+            ? new Activity()
+            : $this->findRecord((int) $activity->getId());
 
-        $activityModel = new Activity();
-        $activityModel->user_id = $activityData->userId;
-        $activityModel->trackable_type = $activityData->trackableType;
-        $activityModel->trackable_id = $activityData->trackableId;
-        $activityModel->type = $activityData->type->value;
-        $activityModel->subject = $activityData->subject;
-        $activityModel->description = $activityData->description;
-        $activityModel->due_date = $activityData->dueDate;
-        $activityModel->completed_at = $activityData->completedAt;
-        
+        if (! $activityModel) {
+            throw new RuntimeException(sprintf(
+                'Activity with ID %d no longer exists.',
+                (int) $activity->getId(),
+            ));
+        }
+
+        $activityModel->fill($this->toPersistence($activity));
         $activityModel->save();
 
         return $this->mapper->toEntity($activityModel->toArray());
@@ -80,38 +83,42 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
         );
     }
 
-
-    public function getFilteredActivities(ActivityFilterDTO $filterDTO): PaginatedResult
+    /**
+     * @param ActivityFilter $filter
+     *
+     * @return PaginatedResult
+     */
+    public function getFilteredActivities(ActivityFilter $filter): PaginatedResult
     {
         $query = Activity::with(['user', 'trackable']);
 
         // ১. স্ট্যাটাস ফিল্টার
-        if ($filterDTO->status === 'pending') {
+        if ($filter->status === 'pending') {
             $query->whereNull('completed_at');
-        } elseif ($filterDTO->status === 'completed') {
+        } elseif ($filter->status === 'completed') {
             $query->whereNotNull('completed_at');
         }
 
         // ২. টাইপ ফিল্টার
-        if ($filterDTO->type !== null) {
-            $query->where('type', $filterDTO->type);
+        if ($filter->type !== null) {
+            $query->where('type', $filter->type);
         }
 
         // ৩. ইউজার ফিল্টার
-        if ($filterDTO->userId !== null) {
-            $query->where('user_id', $filterDTO->userId);
+        if ($filter->userId !== null) {
+            $query->where('user_id', $filter->userId);
         }
 
         // ৪. সময়ভিত্তিক ফিল্টার
-        if ($filterDTO->filter === 'today') {
+        if ($filter->period === 'today') {
             $query->whereDate('due_date', now()->toDateString());
-        } elseif ($filterDTO->filter === 'overdue') {
+        } elseif ($filter->period === 'overdue') {
             $query->whereNull('completed_at')
                   ->where('due_date', '<', now());
         }
 
         // ৫. লারাভেলের পেজিনেটর থেকে ডেটা আনা
-        $eloquentPaginator = $query->orderBy('due_date', 'asc')->paginate($filterDTO->perPage);
+        $eloquentPaginator = $query->orderBy('due_date', 'asc')->paginate($filter->perPage);
 
         // ৬. ডাটাবেসের মডেলগুলোকে ডোমেইন এন্টিটি (ActivityEntity)-তে রূপান্তর করা
         $entities = collect($eloquentPaginator->items())
@@ -128,8 +135,11 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
         );
     }
 
-
-
+    /**
+     * @param int $id
+     *
+     * @return ActivityEntity|null
+     */
     public function findById(int $id): ?ActivityEntity
     {
         $activityModel = Activity::with(['user', 'trackable'])->find($id);
@@ -158,33 +168,6 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     }
 
     /**
-     * @param int                $id
-     * @param ActivityUpdateData $activityUpdateData
-     *
-     * @return ActivityEntity|null Null when the activity no longer exists.
-     */
-    public function update(int $id, ActivityUpdateData $activityUpdateData): ?ActivityEntity
-    {
-        $activityModel = $this->findRecord($id);
-
-        if (! $activityModel) {
-            return null;
-        }
-
-        // Only the mutable columns are written; the tracked record and the
-        // owning user are left exactly as they were.
-        $activityModel->subject = $activityUpdateData->subject;
-        $activityModel->type = $activityUpdateData->type?->value;
-        $activityModel->description = $activityUpdateData->description;
-        $activityModel->due_date = $activityUpdateData->dueDate;
-        $activityModel->completed_at = $activityUpdateData->completedAt;
-
-        $activityModel->save();
-
-        return $this->mapper->toEntity($activityModel->toArray());
-    }
-
-    /**
      * @param ActivityEntity $activity
      *
      * @return void
@@ -192,5 +175,26 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     public function delete(ActivityEntity $activity): void
     {
         $this->deleteRecord((int) $activity->getId());
+    }
+
+    /**
+     * Flattens the entity's own state onto the activity table's columns.
+     *
+     * @param ActivityEntity $activity
+     *
+     * @return array<string, mixed>
+     */
+    private function toPersistence(ActivityEntity $activity): array
+    {
+        return [
+            'user_id' => $activity->getUserId(),
+            'trackable_type' => $activity->getTrackableType(),
+            'trackable_id' => $activity->getTrackableId(),
+            'type' => $activity->getType()->value,
+            'subject' => $activity->getSubject(),
+            'description' => $activity->getDescription(),
+            'due_date' => $activity->getDueDate()?->format('Y-m-d H:i:s'),
+            'completed_at' => $activity->getCompletedAt()?->format('Y-m-d H:i:s'),
+        ];
     }
 }

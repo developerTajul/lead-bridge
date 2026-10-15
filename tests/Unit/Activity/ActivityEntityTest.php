@@ -6,6 +6,8 @@ namespace Tests\Unit\Activity;
 
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\Exceptions\InvalidActivityException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,6 +28,72 @@ final class ActivityEntityTest extends TestCase
         $this->assertNull($entity->getId());
         $this->assertNull($entity->getCompletedAt());
         $this->assertTrue($entity->isPending());
+    }
+
+    public function test_create_new_sets_the_completion_time_when_one_is_supplied(): void
+    {
+        $entity = ActivityEntity::createNew(
+            trackableType: 'App\\Models\\Lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+            userId: 7,
+            completedAt: new \DateTimeImmutable('2026-10-04 08:15:00'),
+        );
+
+        $this->assertFalse($entity->isPending());
+        $this->assertSame('2026-10-04 08:15:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+    }
+
+    public function test_create_new_rejects_an_empty_subject(): void
+    {
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('An activity must carry a subject.');
+
+        ActivityEntity::createNew(
+            trackableType: 'App\\Models\\Lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: '',
+        );
+    }
+
+    #[DataProvider('nonPositiveTrackableIds')]
+    public function test_create_new_rejects_a_non_positive_trackable_id(int $trackableId): void
+    {
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('Trackable ID must be a positive integer');
+
+        ActivityEntity::createNew(
+            trackableType: 'App\\Models\\Lead',
+            trackableId: $trackableId,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+        );
+    }
+
+    /**
+     * @return array<string, array{int}>
+     */
+    public static function nonPositiveTrackableIds(): array
+    {
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+        ];
+    }
+
+    public function test_create_new_rejects_an_empty_trackable_type(): void
+    {
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('An activity must reference a trackable type.');
+
+        ActivityEntity::createNew(
+            trackableType: '',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+        );
     }
 
     public function test_update_details_applies_every_supplied_field(): void
@@ -57,13 +125,35 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('2026-10-05 09:30:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
     }
 
-    public function test_update_details_ignores_an_empty_subject(): void
+    public function test_update_details_rejects_an_empty_subject(): void
     {
         $entity = $this->makeEntity();
 
-        $entity->updateDetails(subject: '');
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('An activity must carry a subject.');
 
-        // An activity must always carry a subject, so the guard keeps the old one.
+        $entity->updateDetails(subject: '');
+    }
+
+    public function test_update_details_rejects_a_whitespace_only_subject(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->expectException(InvalidActivityException::class);
+
+        $entity->updateDetails(subject: '   ');
+    }
+
+    public function test_update_details_keeps_the_subject_when_the_rejected_update_is_caught(): void
+    {
+        $entity = $this->makeEntity();
+
+        try {
+            $entity->updateDetails(subject: '');
+        } catch (InvalidActivityException) {
+            // The entity is left exactly as it was.
+        }
+
         $this->assertSame('Discovery call', $entity->getSubject());
     }
 
@@ -82,16 +172,50 @@ final class ActivityEntityTest extends TestCase
     {
         $entity = $this->makeEntity();
 
-        $entity->markCompleted(new \DateTimeImmutable('2026-12-02 11:00:00'));
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
 
         $this->assertFalse($entity->isPending());
-        $this->assertSame('2026-12-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+    }
+
+    public function test_mark_completed_rejects_an_already_completed_activity(): void
+    {
+        $entity = $this->makeEntity();
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('The activity is already completed.');
+
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-03 11:00:00'));
+    }
+
+    public function test_mark_completed_rejects_a_future_completion_time(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('An activity cannot be completed in the future');
+
+        $entity->markCompleted(
+            completedAt: new \DateTimeImmutable('2026-12-02 11:00:00'),
+            now: new \DateTimeImmutable('2026-12-01 09:00:00'),
+        );
+    }
+
+    public function test_mark_completed_accepts_the_current_moment(): void
+    {
+        $entity = $this->makeEntity();
+        $now = new \DateTimeImmutable('2026-10-02 11:00:00');
+
+        $entity->markCompleted(completedAt: $now, now: $now);
+
+        $this->assertSame($now, $entity->getCompletedAt());
     }
 
     public function test_reopen_clears_the_completion_time(): void
     {
         $entity = $this->makeEntity();
-        $entity->markCompleted(new \DateTimeImmutable('2026-12-02 11:00:00'));
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
 
         $entity->reopen();
 
@@ -105,7 +229,7 @@ final class ActivityEntityTest extends TestCase
 
         $this->assertTrue($entity->isPending());
 
-        $entity->markCompleted(new \DateTimeImmutable('2026-12-02 11:00:00'));
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
 
         $this->assertFalse($entity->isPending());
     }
