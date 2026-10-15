@@ -6,6 +6,7 @@ namespace Core\Activity\Domain\Entities;
 
 use Core\Activity\Domain\Enums\ActivityType;
 use Core\Activity\Domain\Exceptions\InvalidActivityException;
+use Core\Activity\Domain\ValueObjects\TrackableType;
 use DateTimeImmutable;
 
 /**
@@ -13,16 +14,9 @@ use DateTimeImmutable;
  */
 final class ActivityEntity
 {
-    // Relations and timestamps stay read-only: they are projection state, not
-    // part of the activity's own business fields.
-    private ?array $user = null;
-    private ?array $trackable = null;
-    private ?DateTimeImmutable $createdAt = null;
-    private ?DateTimeImmutable $updatedAt = null;
-
     private function __construct(
         private readonly ?int $id,
-        private readonly string $trackableType,
+        private readonly TrackableType $trackableType,
         private readonly int $trackableId,
         private ActivityType $type,
         private string $subject,
@@ -67,13 +61,9 @@ final class ActivityEntity
             throw InvalidActivityException::invalidTrackableId($trackableId);
         }
 
-        if (trim($trackableType) === '') {
-            throw InvalidActivityException::emptyTrackableType();
-        }
-
         return new self(
             id: null,
-            trackableType: $trackableType,
+            trackableType: TrackableType::fromString($trackableType),
             trackableId: $trackableId,
             type: $type,
             subject: $subject,
@@ -113,7 +103,7 @@ final class ActivityEntity
     {
         return new self(
             id: $id,
-            trackableType: $trackableType,
+            trackableType: TrackableType::fromString($trackableType),
             trackableId: $trackableId,
             type: $type,
             subject: $subject,
@@ -165,6 +155,44 @@ final class ActivityEntity
     }
 
     /**
+     * Applies an update payload. Null fields stay unchanged; a completion
+     * time marks the activity completed, and the reopen flag clears an
+     * existing completion.
+     *
+     * @param string|null            $subject
+     * @param ActivityType|null      $type
+     * @param string|null            $description
+     * @param DateTimeImmutable|null $dueDate
+     * @param DateTimeImmutable|null $completedAt
+     * @param bool                   $reopen
+     *
+     * @return void
+     *
+     * @throws InvalidActivityException When a change would break an invariant.
+     */
+    public function applyChanges(
+        ?string $subject = null,
+        ?ActivityType $type = null,
+        ?string $description = null,
+        ?DateTimeImmutable $dueDate = null,
+        ?DateTimeImmutable $completedAt = null,
+        bool $reopen = false
+    ): void {
+        if ($reopen) {
+            $this->reopen();
+        } elseif ($completedAt !== null) {
+            $this->markCompleted($completedAt);
+        }
+
+        $this->updateDetails(
+            subject: $subject,
+            type: $type,
+            description: $description,
+            dueDate: $dueDate,
+        );
+    }
+
+    /**
      * Marks the activity as completed at the given moment.
      *
      * @param DateTimeImmutable      $completedAt
@@ -209,12 +237,32 @@ final class ActivityEntity
         return $this->completedAt === null;
     }
 
+    /**
+     * Whether the activity is still pending past its due date.
+     *
+     * @param DateTimeImmutable $now
+     *
+     * @return bool
+     */
+    public function isOverdue(DateTimeImmutable $now): bool
+    {
+        if (! $this->isPending()) {
+            return false;
+        }
+
+        if ($this->dueDate === null) {
+            return false;
+        }
+
+        return $this->dueDate < $now;
+    }
+
     public function getId(): ?int
     {
         return $this->id;
     }
 
-    public function getTrackableType(): string
+    public function getTrackableType(): TrackableType
     {
         return $this->trackableType;
     }
@@ -252,52 +300,5 @@ final class ActivityEntity
     public function getCompletedAt(): ?DateTimeImmutable
     {
         return $this->completedAt;
-    }
-
-    public function getUser(): ?array
-    {
-        return $this->user;
-    }
-
-    public function getTrackable(): ?array
-    {
-        return $this->trackable;
-    }
-
-    public function getCreatedAt(): ?DateTimeImmutable
-    {
-        return $this->createdAt;
-    }
-
-    public function getUpdatedAt(): ?DateTimeImmutable
-    {
-        return $this->updatedAt;
-    }
-
-    /**
-     * Returns a new instance carrying the given relations and timestamps.
-     * Projection state only - the activity's own fields are untouched.
-     *
-     * @param array|null             $user
-     * @param array|null             $trackable
-     * @param DateTimeImmutable|null $createdAt
-     * @param DateTimeImmutable|null $updatedAt
-     *
-     * @return self
-     */
-    public function withProjection(
-        ?array $user = null,
-        ?array $trackable = null,
-        ?DateTimeImmutable $createdAt = null,
-        ?DateTimeImmutable $updatedAt = null
-    ): self {
-        $clone = clone $this;
-
-        $clone->user = $user;
-        $clone->trackable = $trackable;
-        $clone->createdAt = $createdAt;
-        $clone->updatedAt = $updatedAt;
-
-        return $clone;
     }
 }

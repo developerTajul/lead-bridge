@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Activity;
 
 use App\Models\User;
+use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
@@ -155,16 +156,21 @@ final class AdminActivityIndexTest extends TestCase
             {
                 $this->test->recordFilter($filter);
 
+                $projections = array_map(
+                    fn(ActivityEntity $entity) => new ActivityProjectionDTO(entity: $entity),
+                    $this->items,
+                );
+
                 return new PaginatedResult(
-                    items: $this->items,
-                    total: count($this->items),
+                    items: $projections,
+                    total: count($projections),
                     currentPage: 1,
                     perPage: $filter->perPage,
                     lastPage: 1,
                 );
             }
 
-            public function findById(int $id): ?ActivityEntity
+            public function findById(int $id): ?ActivityProjectionDTO
             {
                 return null;
             }

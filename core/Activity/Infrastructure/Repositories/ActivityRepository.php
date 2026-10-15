@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Core\Activity\Infrastructure\Repositories;
 
 use App\Models\Activity;
+use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
@@ -71,7 +72,7 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
 
         $entities = $paginator
             ->getCollection()
-            ->map(fn(Activity $item) => $this->mapper->toEntity($item->toArray()))
+            ->map(fn(Activity $item) => $this->mapper->toProjection($item->toArray()))
             ->all();
 
         return new PaginatedResult(
@@ -113,6 +114,7 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
         if ($filter->period === 'today') {
             $query->whereDate('due_date', now()->toDateString());
         } elseif ($filter->period === 'overdue') {
+            // SQL form of ActivityEntity::isOverdue(): pending and past due.
             $query->whereNull('completed_at')
                   ->where('due_date', '<', now());
         }
@@ -120,9 +122,10 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
         // ৫. লারাভেলের পেজিনেটর থেকে ডেটা আনা
         $eloquentPaginator = $query->orderBy('due_date', 'asc')->paginate($filter->perPage);
 
-        // ৬. ডাটাবেসের মডেলগুলোকে ডোমেইন এন্টিটি (ActivityEntity)-তে রূপান্তর করা
-        $entities = collect($eloquentPaginator->items())
-            ->map(fn(Activity $item) => $this->mapper->toEntity($item->toArray()))
+        // ৬. ডাটাবেসের মডেলগুলোকে রিড মডেলে রূপান্তর করা
+        $entities = $eloquentPaginator
+            ->getCollection()
+            ->map(fn(Activity $item) => $this->mapper->toProjection($item->toArray()))
             ->all();
 
         // ৭. আপনার ডোমেইনের নিজস্ব PaginatedResult রিটার্ন করা
@@ -138,9 +141,9 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     /**
      * @param int $id
      *
-     * @return ActivityEntity|null
+     * @return ActivityProjectionDTO|null
      */
-    public function findById(int $id): ?ActivityEntity
+    public function findById(int $id): ?ActivityProjectionDTO
     {
         $activityModel = Activity::with(['user', 'trackable'])->find($id);
 
@@ -148,7 +151,7 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
             return null;
         }
 
-        return $this->mapper->toEntity($activityModel->toArray());
+        return $this->mapper->toProjection($activityModel->toArray());
     }
 
     /**

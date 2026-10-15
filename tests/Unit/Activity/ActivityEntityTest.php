@@ -7,6 +7,7 @@ namespace Tests\Unit\Activity;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
 use Core\Activity\Domain\Exceptions\InvalidActivityException;
+use Core\Activity\Domain\ValueObjects\TrackableType;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -163,7 +164,7 @@ final class ActivityEntityTest extends TestCase
 
         $entity->updateDetails(subject: 'New subject', type: ActivityType::EMAIL);
 
-        $this->assertSame('App\\Models\\Lead', $entity->getTrackableType());
+        $this->assertSame('App\\Models\\Lead', $entity->getTrackableType()->toString());
         $this->assertSame(42, $entity->getTrackableId());
         $this->assertSame(7, $entity->getUserId());
     }
@@ -234,23 +235,131 @@ final class ActivityEntityTest extends TestCase
         $this->assertFalse($entity->isPending());
     }
 
-    public function test_with_projection_returns_a_new_instance_and_keeps_the_fields(): void
+    public function test_trackable_type_is_exposed_as_a_value_object(): void
     {
         $entity = $this->makeEntity();
 
-        $projected = $entity->withProjection(
-            user: ['id' => 7, 'name' => 'Tajul'],
-            trackable: ['id' => 42, 'name' => 'Acme'],
-            createdAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
-            updatedAt: new \DateTimeImmutable('2026-10-04 10:00:00'),
+        $this->assertInstanceOf(TrackableType::class, $entity->getTrackableType());
+        $this->assertSame('App\\Models\\Lead', $entity->getTrackableType()->toString());
+    }
+
+    // ---------------------------------------------------------------------
+    // applyChanges()
+    // ---------------------------------------------------------------------
+
+    public function test_apply_changes_updates_only_the_supplied_details(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->applyChanges(subject: 'New subject', type: ActivityType::MEETING);
+
+        $this->assertSame('New subject', $entity->getSubject());
+        $this->assertSame(ActivityType::MEETING, $entity->getType());
+        // Null arguments stay unchanged.
+        $this->assertSame('Intro call with the prospect', $entity->getDescription());
+        $this->assertSame('2026-10-05 09:30:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
+        $this->assertTrue($entity->isPending());
+    }
+
+    public function test_apply_changes_completes_a_pending_activity(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->applyChanges(
+            subject: 'New subject',
+            completedAt: new \DateTimeImmutable('2026-10-02 11:00:00'),
         );
 
-        $this->assertNotSame($entity, $projected);
-        $this->assertNull($entity->getUser());
-        $this->assertSame(['id' => 7, 'name' => 'Tajul'], $projected->getUser());
-        $this->assertSame(['id' => 42, 'name' => 'Acme'], $projected->getTrackable());
-        $this->assertSame('2026-10-03 10:00:00', $projected->getCreatedAt()?->format('Y-m-d H:i:s'));
-        $this->assertSame('Discovery call', $projected->getSubject());
+        $this->assertFalse($entity->isPending());
+        $this->assertSame('2026-10-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+        $this->assertSame('New subject', $entity->getSubject());
+    }
+
+    public function test_apply_changes_reopens_a_completed_activity(): void
+    {
+        $entity = $this->makeEntity();
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        $entity->applyChanges(subject: 'New subject', reopen: true);
+
+        $this->assertTrue($entity->isPending());
+        $this->assertNull($entity->getCompletedAt());
+        $this->assertSame('New subject', $entity->getSubject());
+    }
+
+    public function test_apply_changes_prefers_the_reopen_flag_over_a_completion_time(): void
+    {
+        $entity = $this->makeEntity();
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        // Reopening wins: the activity must not be silently re-completed.
+        $entity->applyChanges(
+            completedAt: new \DateTimeImmutable('2026-10-03 11:00:00'),
+            reopen: true,
+        );
+
+        $this->assertTrue($entity->isPending());
+        $this->assertNull($entity->getCompletedAt());
+    }
+
+    public function test_apply_changes_keeps_the_completion_when_nothing_is_supplied(): void
+    {
+        $entity = $this->makeEntity();
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        $entity->applyChanges(subject: 'New subject');
+
+        $this->assertFalse($entity->isPending());
+        $this->assertSame('2026-10-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+    }
+
+    public function test_apply_changes_rejects_a_future_completion_time(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->expectException(InvalidActivityException::class);
+
+        $entity->applyChanges(completedAt: new \DateTimeImmutable('2099-01-01 00:00:00'));
+    }
+
+    // ---------------------------------------------------------------------
+    // isOverdue()
+    // ---------------------------------------------------------------------
+
+    public function test_is_overdue_is_true_for_a_pending_activity_past_its_due_date(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->assertTrue($entity->isOverdue(new \DateTimeImmutable('2026-10-06 09:30:00')));
+    }
+
+    public function test_is_overdue_is_false_when_the_due_date_lies_ahead(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->assertFalse($entity->isOverdue(new \DateTimeImmutable('2026-10-04 09:30:00')));
+    }
+
+    public function test_is_overdue_is_false_once_the_activity_is_completed(): void
+    {
+        $entity = $this->makeEntity();
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        $this->assertFalse($entity->isOverdue(new \DateTimeImmutable('2026-10-06 09:30:00')));
+    }
+
+    public function test_is_overdue_is_false_without_a_due_date(): void
+    {
+        $entity = ActivityEntity::reconstitute(
+            id: 1,
+            trackableType: 'App\\Models\\Lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+            userId: 7,
+        );
+
+        $this->assertFalse($entity->isOverdue(new \DateTimeImmutable('2026-10-06 09:30:00')));
     }
 
     private function makeEntity(): ActivityEntity

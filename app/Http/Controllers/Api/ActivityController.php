@@ -109,6 +109,7 @@ class ActivityController extends Controller
             'description'  => ['sometimes', 'nullable', 'string'],
             'due_date'     => ['sometimes', 'nullable', 'date'],
             'completed_at' => ['sometimes', 'nullable', 'date'],
+            'reopen'       => ['sometimes', 'boolean'],
         ]);
 
         $activityUpdateDTO = $this->mapper->mapToUpdateDTO($id, $validatedData);

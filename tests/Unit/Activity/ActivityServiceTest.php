@@ -89,7 +89,7 @@ final class ActivityServiceTest extends TestCase
 
         $this->assertNotNull($captured);
         $this->assertNull($captured->getId());
-        $this->assertSame('App\\Models\\Lead', $captured->getTrackableType());
+        $this->assertSame('App\\Models\\Lead', $captured->getTrackableType()->toString());
         $this->assertSame(42, $captured->getTrackableId());
         $this->assertSame(ActivityType::CALL, $captured->getType());
         $this->assertSame('Discovery call', $captured->getSubject());
@@ -284,6 +284,27 @@ final class ActivityServiceTest extends TestCase
         $this->assertSame('2026-10-04 08:15:00', $captured->getCompletedAt()?->format('Y-m-d H:i:s'));
     }
 
+    public function test_update_reopens_the_activity_when_the_dto_asks_for_it(): void
+    {
+        $locked = $this->makeEntity();
+        $locked->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        $this->activityRepository->method('findByIdWithLock')->willReturn($locked);
+
+        $captured = null;
+        $this->activityRepository->method('save')
+            ->willReturnCallback(function (ActivityEntity $entity) use (&$captured) {
+                $captured = $entity;
+
+                return $this->makeEntity();
+            });
+
+        $this->activityService->update(new ActivityUpdateDTO(id: 1, reopen: true));
+
+        $this->assertTrue($captured->isPending());
+        $this->assertNull($captured->getCompletedAt());
+    }
+
     public function test_update_returns_failure_when_the_completion_time_lies_in_the_future(): void
     {
         $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
@@ -380,7 +401,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_delete_returns_success_result(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
         $this->activityRepository->expects($this->once())->method('delete');
 
         $result = $this->activityService->deleteActivity(1);
@@ -393,7 +414,7 @@ final class ActivityServiceTest extends TestCase
     public function test_delete_passes_the_found_entity_to_the_repository(): void
     {
         $entity = $this->makeEntity();
-        $this->activityRepository->method('findById')->willReturn($entity);
+        $this->activityRepository->method('findByIdWithLock')->willReturn($entity);
 
         $captured = null;
         $this->activityRepository->expects($this->once())
@@ -409,7 +430,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_delete_commits_the_transaction_on_success(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
 
         $this->transactionManager->expects($this->once())->method('beginTransaction');
         $this->transactionManager->expects($this->once())->method('commit');
@@ -422,7 +443,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_delete_dispatches_the_deleted_event_after_commit(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
 
         $this->eventDispatcher->expects($this->once())
             ->method('dispatch')
@@ -433,7 +454,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_delete_returns_failure_when_activity_is_missing(): void
     {
-        $this->activityRepository->method('findById')->willReturn(null);
+        $this->activityRepository->method('findByIdWithLock')->willReturn(null);
 
         $this->transactionManager->expects($this->once())->method('beginTransaction');
         $this->transactionManager->expects($this->once())->method('rollback');
@@ -450,7 +471,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_delete_rolls_back_and_returns_failure_when_repository_throws(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
         $this->activityRepository->method('delete')
             ->willThrowException(new RuntimeException('Database is down.'));
 
@@ -467,7 +488,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_delete_does_not_dispatch_the_event_when_repository_throws(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
         $this->activityRepository->method('delete')
             ->willThrowException(new RuntimeException('Database is down.'));
 
@@ -504,11 +525,6 @@ final class ActivityServiceTest extends TestCase
             description: 'Intro call with the prospect',
             dueDate: new \DateTimeImmutable('2026-10-05 09:30:00'),
             completedAt: null,
-        )->withProjection(
-            user: ['id' => 7, 'name' => 'Tajul'],
-            trackable: ['id' => 42, 'name' => 'Acme'],
-            createdAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
-            updatedAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
         );
     }
 }

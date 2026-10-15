@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\Contracts;
 
+use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -28,7 +29,7 @@ interface ActivityRepositoryContract
      *
      * @param int $perPage Items per page (default: 10).
      *
-     * @return PaginatedResult
+     * @return PaginatedResult Items are ActivityProjectionDTO instances.
      */
     public function paginate(int $perPage = 10): PaginatedResult;
 
@@ -37,21 +38,21 @@ interface ActivityRepositoryContract
      *
      * @param ActivityFilter $filter
      *
-     * @return PaginatedResult
+     * @return PaginatedResult Items are ActivityProjectionDTO instances.
      */
     public function getFilteredActivities(ActivityFilter $filter): PaginatedResult;
 
     /**
-     * Finds an activity by its ID.
+     * Finds an activity by its ID, with its relations loaded.
      *
      * @param int $id
      *
-     * @return ActivityEntity|null
+     * @return ActivityProjectionDTO|null
      */
-    public function findById(int $id): ?ActivityEntity;
+    public function findById(int $id): ?ActivityProjectionDTO;
 
     /**
-     * Finds an activity by its ID with a row lock, for use inside a transaction.
+     * Finds the entity by its ID with a row lock, for use inside a transaction.
      *
      * @param int $id
      *

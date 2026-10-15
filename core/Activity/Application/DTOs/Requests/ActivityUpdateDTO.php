@@ -19,5 +19,6 @@ readonly class ActivityUpdateDTO
         public ?string $description = null,
         public ?string $dueDate = null,
         public ?string $completedAt = null,
+        public bool $reopen = false,
     ) {}
 }

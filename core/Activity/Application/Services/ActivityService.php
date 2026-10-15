@@ -7,6 +7,7 @@ namespace Core\Activity\Application\Services;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
+use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
@@ -16,6 +17,7 @@ use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
+use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -56,13 +58,15 @@ final class ActivityService
 
             $savedEntity = $this->activityRepository->save($activityEntity);
 
-            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO( $savedEntity );
+            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO(
+                new ActivityProjectionDTO(entity: $savedEntity)
+            );
 
             $this->transactionManager->commit();
 
             $this->eventDispatcher->dispatch(new ActivityCreatedEvent(
                 activityId: $savedEntity->getId(),
-                trackableType: $savedEntity->getTrackableType(),
+                trackableType: $savedEntity->getTrackableType()->toString(),
                 trackableId: $savedEntity->getTrackableId()
             ));
 
@@ -98,21 +102,12 @@ final class ActivityService
                 perPage: $filterDTO->perPage
             );
 
-            // ২. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে ActivityEntity আছে)
+            // ২. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে read model আছে)
             $paginatedActivities = $this->activityRepository->getFilteredActivities($activityFilter);
 
-            // ৩. ভেতরের Entity গুলোকে ActivityResponseDTO তে রূপান্তর করা
-            $mappedItems = collect($paginatedActivities->items)
-                ->map(fn(ActivityEntity $entity) => $this->activityResponseMapper->toResponseDTO($entity))
-                ->all();
-
-            // ৪. ম্যাপ করা ডাটা দিয়ে নতুন একটি PaginatedResult তৈরি করা
-            $mappedPaginatedResult = new \Core\Shared\Domain\DataObjects\PaginatedResult(
-                items: $mappedItems,
-                total: $paginatedActivities->total,
-                currentPage: $paginatedActivities->currentPage,
-                perPage: $paginatedActivities->perPage,
-                lastPage: $paginatedActivities->lastPage
+            // ৩. ভেতরের read model গুলোকে ActivityResponseDTO তে রূপান্তর করা
+            $mappedPaginatedResult = $paginatedActivities->map(
+                fn(ActivityProjectionDTO $projection) => $this->activityResponseMapper->toResponseDTO($projection)
             );
 
             return Result::success(
@@ -130,15 +125,15 @@ final class ActivityService
     public function getActivityById(int $id): Result
     {
         try {
-            $activityEntity = $this->activityRepository->findById($id);
+            $activityProjection = $this->activityRepository->findById($id);
 
             // যদি ডেটা না পাওয়া যায়
-            if (! $activityEntity) {
+            if (! $activityProjection) {
                 return Result::failure('Activity not found.', 'ACTIVITY_NOT_FOUND');
             }
 
             // ডেটা পাওয়া গেলে রেসপন্স ম্যাপার দিয়ে DTO-তে কনভার্ট করা
-            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($activityEntity);
+            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($activityProjection);
 
             return Result::success(
                 data: $activityResponseDTO,
@@ -176,23 +171,25 @@ final class ActivityService
             }
 
             // Tell the entity to mutate itself; it guards its own invariants.
-            $activityEntity->updateDetails(
+            $activityEntity->applyChanges(
                 subject: $activityUpdateDTO->subject,
                 type: $activityUpdateDTO->type,
                 description: $activityUpdateDTO->description,
                 dueDate: $activityUpdateDTO->dueDate !== null
                     ? new \DateTimeImmutable($activityUpdateDTO->dueDate)
                     : null,
+                completedAt: $activityUpdateDTO->completedAt !== null
+                    ? new \DateTimeImmutable($activityUpdateDTO->completedAt)
+                    : null,
+                reopen: $activityUpdateDTO->reopen,
             );
-
-            if ($activityUpdateDTO->completedAt !== null) {
-                $activityEntity->markCompleted(new \DateTimeImmutable($activityUpdateDTO->completedAt));
-            }
 
             // The mutated entity is handed straight to the repository.
             $updatedActivity = $this->activityRepository->save($activityEntity);
 
-            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($updatedActivity);
+            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO(
+                new ActivityProjectionDTO(entity: $updatedActivity)
+            );
 
             $this->transactionManager->commit();
 
@@ -228,7 +225,8 @@ final class ActivityService
         try {
             $this->transactionManager->beginTransaction();
 
-            $activityEntity = $this->activityRepository->findById($id);
+            // The delete path needs the entity itself, not the read model.
+            $activityEntity = $this->activityRepository->findByIdWithLock($id);
 
             if (! $activityEntity) {
                 $this->transactionManager->rollback();
@@ -245,7 +243,7 @@ final class ActivityService
 
             $this->eventDispatcher->dispatch(new ActivityDeletedEvent(
                 activityId: $id,
-                trackableType: $activityEntity->getTrackableType(),
+                trackableType: $activityEntity->getTrackableType()->toString(),
                 trackableId: $activityEntity->getTrackableId()
             ));
 

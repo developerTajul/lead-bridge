@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Activity;
 
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
+use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Application\Services\ActivityService;
@@ -150,7 +151,7 @@ final class ActivityIndexTest extends TestCase
 
     public function test_show_returns_success_result_with_response_dto(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findById')->willReturn($this->makeProjection());
 
         $result = $this->activityService->getActivityById(1);
 
@@ -162,7 +163,7 @@ final class ActivityIndexTest extends TestCase
 
     public function test_show_renders_the_enum_as_a_plain_string(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findById')->willReturn($this->makeProjection());
 
         $result = $this->activityService->getActivityById(1);
 
@@ -174,7 +175,7 @@ final class ActivityIndexTest extends TestCase
 
     public function test_show_carries_the_loaded_user_and_trackable(): void
     {
-        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('findById')->willReturn($this->makeProjection());
 
         $result = $this->activityService->getActivityById(1);
 
@@ -209,11 +210,22 @@ final class ActivityIndexTest extends TestCase
     private function makePaginatedResult(): PaginatedResult
     {
         return new PaginatedResult(
-            items: [$this->makeEntity()],
+            items: [$this->makeProjection()],
             total: 3,
             currentPage: 2,
             perPage: 15,
             lastPage: 4,
+        );
+    }
+
+    private function makeProjection(): ActivityProjectionDTO
+    {
+        return new ActivityProjectionDTO(
+            entity: $this->makeEntity(),
+            user: ['id' => 7, 'name' => 'Tajul'],
+            trackable: ['id' => 42, 'name' => 'Acme'],
+            createdAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
+            updatedAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
         );
     }
 
@@ -229,11 +241,6 @@ final class ActivityIndexTest extends TestCase
             description: 'Intro call with the prospect',
             dueDate: new \DateTimeImmutable('2026-10-05 09:30:00'),
             completedAt: null,
-        )->withProjection(
-            user: ['id' => 7, 'name' => 'Tajul'],
-            trackable: ['id' => 42, 'name' => 'Acme'],
-            createdAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
-            updatedAt: new \DateTimeImmutable('2026-10-03 10:00:00'),
         );
     }
 }

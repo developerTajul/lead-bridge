@@ -56,6 +56,7 @@ final class ActivityMapper implements ActivityMapperContract
             description: $validatedData['description'] ?? null,
             dueDate: $validatedData['due_date'] ?? null,
             completedAt: $validatedData['completed_at'] ?? null,
+            reopen: (bool) ($validatedData['reopen'] ?? false),
         );
     }
 }
