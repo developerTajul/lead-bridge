@@ -3,92 +3,88 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Activity\StoreActivityRequest;
 use App\Models\Activity;
 use App\Models\Lead;
+use Core\Activity\Application\Contracts\ActivityMapperContract;
+use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
+use Core\Activity\Application\Services\ActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
 
 class ActivityController extends Controller
 {
+    public function __construct(
+        private readonly ActivityService $activityService,
+        private readonly ActivityMapperContract $mapper
+    ){}
+
     /**
      * Display a listing of the resource with flexible filters.
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Activity::with(['user', 'trackable']);
 
-        // ১. স্ট্যাটাস অনুযায়ী ফিল্টার (pending / completed)
-        if ($request->filled('status')) {
-            $status = (string) $request->input('status');
-            if ($status === 'pending') {
-                $query->whereNull('completed_at');
-            } elseif ($status === 'completed') {
-                $query->whereNotNull('completed_at');
-            }
+        // ১. Request থেকে ডাটা নিয়ে সরাসরি DTO তৈরি করা (Mapper ব্যবহার করেও করতে পারেন)
+        $filterDTO = new ActivityFilterDTO(
+            status: $request->input('status'),
+            type: $request->input('type'),
+            userId: $request->filled('user_id') ? $request->integer('user_id') : null,
+            filter: $request->input('filter'),
+            perPage: (int) $request->input('per_page', 15)
+        );
+
+        // ২. সার্ভিস লেয়ারকে DTO দিয়ে দেওয়া (সার্ভিস জানবে কীভাবে ফিল্টার করে ডাটা আনতে হবে)
+        $result = $this->activityService->getActivities($filterDTO);
+
+
+        // ৩. যদি কোনো কারণে এরর আসে
+        if (! $result->success) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $result->message,
+                'error_code' => $result->errorCode ?? 'ACTIVITY_FETCH_FAILED'
+            ], Response::HTTP_BAD_REQUEST);
         }
 
-        // ২. টাইপ ফিল্টার (call, meeting, task ইত্যাদি)
-        if ($request->filled('type')) {
-            $query->where('type', (string) $request->input('type'));
-        }
-
-        // ৩. নির্দিষ্ট ইউজার ফিল্টার
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->integer('user_id'));
-        }
-
-        // ৪. সময়ভিত্তিক ফিল্টার (today / overdue)
-        if ($request->filled('filter')) {
-            $filter = (string) $request->input('filter');
-            $today = now()->toDateString();
-
-            if ($filter === 'today') {
-                $query->whereDate('due_date', $today);
-            } elseif ($filter === 'overdue') {
-                $query->whereNull('completed_at')
-                      ->where('due_date', '<', now());
-            }
-        }
-
-        $activities = $query->orderBy('due_date', 'asc')->paginate(15);
-
+        // ৪. সফল হলে রেসপন্স দেওয়া
         return response()->json([
             'status'  => 'success',
-            'message' => 'Activities retrieved successfully.',
-            'data'    => $activities,
+            'message' => $result->message ?? 'Activities retrieved successfully.',
+            'data'    => $result->data, 
         ], Response::HTTP_OK);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(StoreActivityRequest $request)
     {
-       $validated = $request->validate([
-           'trackable_type' => ['required', 'string', 'max:255'],
-           'trackable_id' => ['required', 'integer'],
-           'type' => ['required', 'string', 'max:255'],
-           'subject' => ['required', 'string', 'max:255'],
-           'description' => ['required', 'string', 'max:255'],
-           'due_date' => ['required', 'date'],
-       ]); 
+       $validated = $request->validated(); 
 
        $validated['user_id'] = auth()->id();
 
-       $activity = Activity::create($validated);
+       $activityCreateDTO = $this->mapper->mapToCreateDTO($validated);
 
-       if ($activity->trackable_type === Lead::class || $activity->trackable_type === 'App\Models\Lead') {
-            Lead::where('id', $activity->trackable_id)
-                ->where('status', 'new')
-                ->update(['status' => 'contacted']);
-        }
+       $result = $this->activityService->create($activityCreateDTO); 
 
+
+        // যদি কোনো কারণে ফেইল করে (Result::failure)
+       if (! $result->success) {
+           return response()->json([
+               'status'  => 'error',
+               'message' => $result->message,
+               'error_code' => $result->errorCode
+           ], Response::HTTP_BAD_REQUEST);
+       }
+
+       // সফল হলে (Result::success)
        return response()->json([
             'status'  => 'success',
-            'message' => 'Activity created and lead status updated successfully.',
-            'data'    => $activity,
+            'message' => $result->message, // 'Activity created successfully.'
+            'data'    => $result->data,    // এটি হলো ActivityResponseDTO
         ], Response::HTTP_CREATED);
 
     }

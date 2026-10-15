@@ -18,7 +18,6 @@ final class Activity extends Model
      * Mass assignable attributes.
      *
      * @var array<int, string>
-     */
     protected $fillable = [
         'user_id',
         'trackable_type',
@@ -29,12 +28,12 @@ final class Activity extends Model
         'due_date',
         'completed_at',
     ];
+    */
 
     /**
      * Attribute casting.
      *
      * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -42,6 +41,7 @@ final class Activity extends Model
             'completed_at' => 'datetime',
         ];
     }
+    */
 
     /**
      * যে ইউজার অ্যাক্টিভিটি তৈরি করেছে তার রিলেশন

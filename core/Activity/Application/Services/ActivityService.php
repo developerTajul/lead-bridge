@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Core\Activity\Application\Services;
 
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
+use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\DataObjects\ActivityData;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\Events\ActivityCreatedEvent;
 use Core\Shared\Application\DTOs\Result;
+use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
 use Psr\Log\LoggerInterface;
 
@@ -23,6 +26,7 @@ final class ActivityService
         private readonly ActivityResponseMapper $activityResponseMapper,
         private readonly TransactionManagerContract $transactionManager,
         private readonly LoggerInterface $logger,
+        private readonly EventDispatcherContract $eventDispatcher
     ) {}
 
     /**
@@ -32,27 +36,43 @@ final class ActivityService
      *
      * @return Result Contains the ActivityResponseDTO on success.
      */
-    public function createActivity(ActivityCreateDTO $activityCreateDTO): Result
+    public function create(ActivityCreateDTO $activityCreateDTO): Result
     {
         try {
             $this->transactionManager->beginTransaction();
 
-            $activityData = new ActivityData(
+            $activityEntity = ActivityEntity::createNew(                
                 trackableType: $activityCreateDTO->trackableType,
                 trackableId: $activityCreateDTO->trackableId,
                 type: $activityCreateDTO->type,
                 subject: $activityCreateDTO->subject,
                 userId: $activityCreateDTO->userId,
                 description: $activityCreateDTO->description,
-                dueDate: $activityCreateDTO->dueDate,
-                completedAt: $activityCreateDTO->completedAt,
+                dueDate: $activityCreateDTO->dueDate ? new \DateTimeImmutable($activityCreateDTO->dueDate) : null
             );
 
-            $activityEntity = $this->activityRepository->create($activityData);
+            $activityData = new ActivityData(
+                trackableType: $activityEntity->getTrackableType(),
+                trackableId: $activityEntity->getTrackableId(),
+                type: $activityEntity->getType(),
+                subject: $activityEntity->getSubject(),
+                userId: $activityEntity->getUserId(),
+                description: $activityEntity->getDescription(),
+                dueDate: $activityEntity->getDueDate()?->format('Y-m-d H:i:s'),
+                completedAt: $activityEntity->getCompletedAt()?->format('Y-m-d H:i:s'),
+            );
 
-            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($activityEntity);
+            $savedEntity = $this->activityRepository->create( $activityData );
+
+            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO( $savedEntity );
 
             $this->transactionManager->commit();
+
+            $this->eventDispatcher->dispatch(new ActivityCreatedEvent(
+                activityId: $savedEntity->getId(),
+                trackableType: $savedEntity->getTrackableType(),
+                trackableId: $savedEntity->getTrackableId()
+            ));
 
             return Result::success(
                 data: $activityResponseDTO,
@@ -73,30 +93,37 @@ final class ActivityService
         }
     }
 
-    /**
-     * Returns a paginated list of activities.
-     *
-     * @param int $perPage Items per page (default: 10).
-     *
-     * @return Result Contains a PaginatedResult of ActivityResponseDTO on success.
-     */
-    public function getActivities(int $perPage = 10): Result
+
+public function getActivities(ActivityFilterDTO $filterDTO): Result
     {
         try {
-            $paginatedEntities = $this->activityRepository->paginate($perPage);
+            // ১. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে ActivityEntity আছে)
+            $paginatedActivities = $this->activityRepository->getFilteredActivities($filterDTO);
 
-            $paginatedResponse = $paginatedEntities->map(
-                fn(ActivityEntity $entity) => $this->activityResponseMapper->toResponseDTO($entity),
+            // ২. ভেতরের Entity গুলোকে ActivityResponseDTO তে রূপান্তর করা
+            $mappedItems = array_map(
+                fn($entity) => $this->activityResponseMapper->toResponseDTO($entity),
+                $paginatedActivities->items
             );
 
-            return Result::success(data: $paginatedResponse);
+            // ৩. ম্যাপ করা ডাটা দিয়ে নতুন একটি PaginatedResult তৈরি করা
+            $mappedPaginatedResult = new \Core\Shared\Domain\DataObjects\PaginatedResult(
+                items: $mappedItems,
+                total: $paginatedActivities->total,
+                currentPage: $paginatedActivities->currentPage,
+                perPage: $paginatedActivities->perPage,
+                lastPage: $paginatedActivities->lastPage
+            );
+
+            return Result::success(
+                data: $mappedPaginatedResult,
+                message: 'Activities retrieved successfully.'
+            );
         } catch (\Throwable $exception) {
             $this->logger->error('Failed to retrieve activities.', ['exception' => $exception]);
-
-            return Result::failure(
-                message: 'Failed to retrieve activities. Please try again.',
-                errorCode: 'ACTIVITY_INDEX_FAILED',
-            );
+            return Result::failure('Failed to retrieve activities.', 'ACTIVITY_INDEX_FAILED');
         }
     }
+
+
 }

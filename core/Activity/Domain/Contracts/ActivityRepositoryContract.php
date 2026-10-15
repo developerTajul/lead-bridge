@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\Contracts;
 
+use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Domain\DataObjects\ActivityData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -30,4 +31,9 @@ interface ActivityRepositoryContract
      * @return PaginatedResult
      */
     public function paginate(int $perPage = 10): PaginatedResult;
+
+    /**
+     * DTO ব্যবহার করে ফিল্টার করা অ্যাক্টিভিটি লিস্ট নিয়ে আসবে
+     */
+    public function getFilteredActivities(ActivityFilterDTO $filterDTO): PaginatedResult;
 }

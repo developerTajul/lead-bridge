@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Core\Activity\Infrastructure\Repositories;
 
 use App\Models\Activity;
+use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\DataObjects\ActivityData;
 use Core\Activity\Domain\Entities\ActivityEntity;
@@ -38,7 +39,19 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
      */
     public function create(ActivityData $activityData): ActivityEntity
     {
-        $activityModel = $this->createRecord($activityData->toArray());
+        // $activityModel = $this->createRecord( $activityData->toArray() );
+
+        $activityModel = new Activity();
+        $activityModel->user_id = $activityData->userId;
+        $activityModel->trackable_type = $activityData->trackableType;
+        $activityModel->trackable_id = $activityData->trackableId;
+        $activityModel->type = $activityData->type->value;
+        $activityModel->subject = $activityData->subject;
+        $activityModel->description = $activityData->description;
+        $activityModel->due_date = $activityData->dueDate;
+        $activityModel->completed_at = $activityData->completedAt;
+        
+        $activityModel->save();
 
         return $this->mapper->toEntity($activityModel->toArray());
     }
@@ -63,6 +76,54 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
             currentPage: $paginator->currentPage(),
             perPage: $paginator->perPage(),
             lastPage: $paginator->lastPage(),
+        );
+    }
+
+
+    public function getFilteredActivities(ActivityFilterDTO $filterDTO): PaginatedResult
+    {
+        $query = Activity::with(['user', 'trackable']);
+
+        // ১. স্ট্যাটাস ফিল্টার
+        if ($filterDTO->status === 'pending') {
+            $query->whereNull('completed_at');
+        } elseif ($filterDTO->status === 'completed') {
+            $query->whereNotNull('completed_at');
+        }
+
+        // ২. টাইপ ফিল্টার
+        if ($filterDTO->type !== null) {
+            $query->where('type', $filterDTO->type);
+        }
+
+        // ৩. ইউজার ফিল্টার
+        if ($filterDTO->userId !== null) {
+            $query->where('user_id', $filterDTO->userId);
+        }
+
+        // ৪. সময়ভিত্তিক ফিল্টার
+        if ($filterDTO->filter === 'today') {
+            $query->whereDate('due_date', now()->toDateString());
+        } elseif ($filterDTO->filter === 'overdue') {
+            $query->whereNull('completed_at')
+                  ->where('due_date', '<', now());
+        }
+
+        // ৫. লারাভেলের পেজিনেটর থেকে ডেটা আনা
+        $eloquentPaginator = $query->orderBy('due_date', 'asc')->paginate($filterDTO->perPage);
+
+        // ৬. ডাটাবেসের মডেলগুলোকে ডোমেইন এন্টিটি (ActivityEntity)-তে রূপান্তর করা
+        $entities = collect($eloquentPaginator->items())
+            ->map(fn(Activity $item) => $this->mapper->toEntity($item->toArray()))
+            ->all();
+
+        // ৭. আপনার ডোমেইনের নিজস্ব PaginatedResult রিটার্ন করা
+        return new PaginatedResult(
+            items: $entities,
+            total: $eloquentPaginator->total(),
+            currentPage: $eloquentPaginator->currentPage(),
+            perPage: $eloquentPaginator->perPage(),
+            lastPage: $eloquentPaginator->lastPage(),
         );
     }
 }

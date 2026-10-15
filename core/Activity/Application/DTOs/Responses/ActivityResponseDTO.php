@@ -19,8 +19,6 @@ readonly class ActivityResponseDTO
         public string $subject,
         public ?string $description,
         public ?string $dueDate,
-        public ?string $completedAt,
-        public string $createdAt,
-        public string $updatedAt,
+        public ?string $completedAt
     ) {}
 }

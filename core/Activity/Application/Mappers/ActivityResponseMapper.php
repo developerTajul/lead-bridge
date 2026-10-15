@@ -15,17 +15,15 @@ final class ActivityResponseMapper
     public function toResponseDTO(ActivityEntity $entity): ActivityResponseDTO
     {
         return new ActivityResponseDTO(
-            id: $entity->id,
-            userId: $entity->userId,
-            trackableType: $entity->trackableType,
-            trackableId: $entity->trackableId,
-            type: $entity->type->value,
-            subject: $entity->subject,
-            description: $entity->description,
-            dueDate: $entity->dueDate,
-            completedAt: $entity->completedAt,
-            createdAt: $entity->createdAt,
-            updatedAt: $entity->updatedAt,
+            id: $entity->getId(),
+            trackableType: $entity->getTrackableType(),
+            trackableId: $entity->getTrackableId(),
+            type: $entity->getType()->value, // Enum থেকে স্ট্রিং ভ্যালু নেওয়া হলো
+            subject: $entity->getSubject(),
+            userId: $entity->getUserId(),
+            description: $entity->getDescription(),
+            dueDate: $entity->getDueDate()?->format('Y-m-d H:i:s'),
+            completedAt: $entity->getCompletedAt()?->format('Y-m-d H:i:s')
         );
     }
 }

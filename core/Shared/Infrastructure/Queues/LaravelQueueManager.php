@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace Core\Shared\Infrastructure\Queues;
+use App\Jobs\UpdateLeadStatusJob;
 use Core\Shared\Application\Contracts\QueueManagerContract;
 use Core\Shared\Application\DTOs\WriteDTO;
 
@@ -10,6 +11,7 @@ class LaravelQueueManager implements QueueManagerContract {
     {
         $jobClass = match ($jobIdentifier) {
             'lead.inbound.process' => \App\Jobs\ProcessInboundLead::class,
+            'lead_status_update_topic' => UpdateLeadStatusJob::class,
             default => throw new \InvalidArgumentException("Unrecognized job identifier: {$jobIdentifier}"),
         };
 
