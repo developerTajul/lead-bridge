@@ -12,6 +12,12 @@ use DateTimeImmutable;
  */
 class ActivityEntity
 {
+    // রিলেশন এবং টাইমস্ট্যাম্পের জন্য নতুন প্রোপার্টি
+    private ?array $user = null;
+    private ?array $trackable = null;
+    private ?DateTimeImmutable $createdAt = null;
+    private ?DateTimeImmutable $updatedAt = null;
+
     private function __construct(
         private readonly ?int $id,
         private readonly string $trackableType,
@@ -118,5 +124,49 @@ class ActivityEntity
     public function getCompletedAt(): ?DateTimeImmutable 
     { 
         return $this->completedAt; 
+    }
+
+    // --- নতুন যুক্ত করা Getter মেথডসমূহ ---
+
+    public function getUser(): ?array 
+    { 
+        return $this->user; 
+    }
+
+    public function getTrackable(): ?array 
+    { 
+        return $this->trackable; 
+    }
+
+    public function getCreatedAt(): ?DateTimeImmutable 
+    { 
+        return $this->createdAt; 
+    }
+
+    public function getUpdatedAt(): ?DateTimeImmutable 
+    { 
+        return $this->updatedAt; 
+    }
+
+    // --- নতুন যুক্ত করা Setter মেথডসমূহ ---
+
+    public function setUser(?array $user): void 
+    {
+        $this->user = $user;
+    }
+
+    public function setTrackable(?array $trackable): void 
+    {
+        $this->trackable = $trackable;
+    }
+
+    public function setCreatedAt(?DateTimeImmutable $createdAt): void 
+    {
+        $this->createdAt = $createdAt;
+    }
+
+    public function setUpdatedAt(?DateTimeImmutable $updatedAt): void 
+    {
+        $this->updatedAt = $updatedAt;
     }
 }

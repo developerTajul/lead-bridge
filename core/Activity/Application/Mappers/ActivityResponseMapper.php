@@ -16,14 +16,18 @@ final class ActivityResponseMapper
     {
         return new ActivityResponseDTO(
             id: $entity->getId(),
-            trackableType: $entity->getTrackableType(),
-            trackableId: $entity->getTrackableId(),
-            type: $entity->getType()->value, // Enum থেকে স্ট্রিং ভ্যালু নেওয়া হলো
+            user_id: $entity->getUserId(),
+            trackable_type: $entity->getTrackableType(),
+            trackable_id: $entity->getTrackableId(),
+            type: $entity->getType()->value,
             subject: $entity->getSubject(),
-            userId: $entity->getUserId(),
             description: $entity->getDescription(),
-            dueDate: $entity->getDueDate()?->format('Y-m-d H:i:s'),
-            completedAt: $entity->getCompletedAt()?->format('Y-m-d H:i:s')
+            due_date: $entity->getDueDate()?->format('Y-m-d H:i:s'),
+            completed_at: $entity->getCompletedAt()?->format('Y-m-d H:i:s'),
+            created_at: $entity->getCreatedAt()?->format('Y-m-d\TH:i:s.000000\Z'),
+            updated_at: $entity->getUpdatedAt()?->format('Y-m-d\TH:i:s.000000\Z'),
+            user: $entity->getUser(),
+            trackable: $entity->getTrackable()
         );
     }
 }

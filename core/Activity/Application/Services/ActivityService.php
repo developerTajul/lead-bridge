@@ -94,7 +94,7 @@ final class ActivityService
     }
 
 
-public function getActivities(ActivityFilterDTO $filterDTO): Result
+    public function getActivities(ActivityFilterDTO $filterDTO): Result
     {
         try {
             // ১. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে ActivityEntity আছে)
@@ -122,6 +122,31 @@ public function getActivities(ActivityFilterDTO $filterDTO): Result
         } catch (\Throwable $exception) {
             $this->logger->error('Failed to retrieve activities.', ['exception' => $exception]);
             return Result::failure('Failed to retrieve activities.', 'ACTIVITY_INDEX_FAILED');
+        }
+    }
+
+
+
+    public function getActivityById(int $id): Result
+    {
+        try {
+            $activityEntity = $this->activityRepository->findById($id);
+
+            // যদি ডেটা না পাওয়া যায়
+            if (! $activityEntity) {
+                return Result::failure('Activity not found.', 'ACTIVITY_NOT_FOUND');
+            }
+
+            // ডেটা পাওয়া গেলে রেসপন্স ম্যাপার দিয়ে DTO-তে কনভার্ট করা
+            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($activityEntity);
+
+            return Result::success(
+                data: $activityResponseDTO,
+                message: 'Activity retrieved successfully.'
+            );
+        } catch (\Throwable $exception) {
+            $this->logger->error('Failed to retrieve activity.', ['id' => $id, 'exception' => $exception]);
+            return Result::failure('Failed to retrieve activity.', 'ACTIVITY_FETCH_FAILED');
         }
     }
 

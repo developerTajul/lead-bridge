@@ -126,4 +126,19 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
             lastPage: $eloquentPaginator->lastPage(),
         );
     }
+
+
+
+    public function findById(int $id): ?ActivityEntity
+    {
+        // কন্ট্রোলারের ইলোকুয়েন্ট কুয়েরি এখানে চলে আসলো
+        $activityModel = Activity::with(['user', 'trackable'])->find($id);
+
+        if (! $activityModel) {
+            return null;
+        }
+
+        // মডেলকে ডোমেইন এন্টিটিতে ম্যাপ করে রিটার্ন করা হচ্ছে
+        return $this->mapper->toEntity($activityModel->toArray());
+    }
 }

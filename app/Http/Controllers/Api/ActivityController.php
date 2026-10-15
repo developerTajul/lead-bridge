@@ -92,22 +92,25 @@ class ActivityController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(int $id): JsonResponse
     {
-        $activity = Activity::with(['user', 'trackable'])->find($id);
+        // ১. সার্ভিস লেয়ারকে শুধু আইডি দিয়ে দেওয়া
+        $result = $this->activityService->getActivityById($id);
 
-        if (! $activity) {
+        // ২. ডেটা না পেলে (404)
+        if (! $result->success) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Activity not found.',
-            ], Response::HTTP_NOT_FOUND); // 404
+                'message' => $result->message, // 'Activity not found.'
+            ], Response::HTTP_NOT_FOUND); 
         }
 
+        // ৩. ডেটা পেলে (200)
         return response()->json([
             'status'  => 'success',
-            'message' => 'Activity retrieved successfully.',
-            'data'    => $activity,
-        ], Response::HTTP_OK); // 200
+            'message' => $result->message,
+            'data'    => $result->data, // এটি ম্যাপ করা ActivityResponseDTO
+        ], Response::HTTP_OK); 
     }
 
     public function update(Request $request, string $id): JsonResponse

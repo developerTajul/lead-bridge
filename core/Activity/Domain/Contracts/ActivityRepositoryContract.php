@@ -36,4 +36,13 @@ interface ActivityRepositoryContract
      * DTO ব্যবহার করে ফিল্টার করা অ্যাক্টিভিটি লিস্ট নিয়ে আসবে
      */
     public function getFilteredActivities(ActivityFilterDTO $filterDTO): PaginatedResult;
+
+
+    /**
+     * Finds an activity by its ID.
+     *
+     * @param int $id
+     * @return ActivityEntity|null
+     */
+    public function findById(int $id): ?ActivityEntity;
 }
