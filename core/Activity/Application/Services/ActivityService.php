@@ -13,6 +13,7 @@ use Core\Activity\Domain\DataObjects\ActivityData;
 use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Events\ActivityCreatedEvent;
+use Core\Activity\Domain\Events\ActivityDeletedEvent;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
@@ -103,10 +104,9 @@ final class ActivityService
             $paginatedActivities = $this->activityRepository->getFilteredActivities($filterDTO);
 
             // ২. ভেতরের Entity গুলোকে ActivityResponseDTO তে রূপান্তর করা
-            $mappedItems = array_map(
-                fn($entity) => $this->activityResponseMapper->toResponseDTO($entity),
-                $paginatedActivities->items
-            );
+            $mappedItems = collect($paginatedActivities->items)
+                ->map(fn($entity) => $this->activityResponseMapper->toResponseDTO($entity))
+                ->all();
 
             // ৩. ম্যাপ করা ডাটা দিয়ে নতুন একটি PaginatedResult তৈরি করা
             $mappedPaginatedResult = new \Core\Shared\Domain\DataObjects\PaginatedResult(
@@ -231,6 +231,59 @@ final class ActivityService
             return Result::failure(
                 message: 'Failed to update the activity. Please try again.',
                 errorCode: 'ACTIVITY_UPDATE_FAILED',
+            );
+        }
+    }
+
+    /**
+     * Deletes an existing activity inside a transaction.
+     *
+     * @param int $id
+     *
+     * @return Result
+     */
+    public function deleteActivity(int $id): Result
+    {
+        try {
+            $this->transactionManager->beginTransaction();
+
+            $activityEntity = $this->activityRepository->findById($id);
+
+            if (! $activityEntity) {
+                $this->transactionManager->rollback();
+
+                return Result::failure(
+                    message: "Activity not found with ID: {$id}",
+                    errorCode: 'ACTIVITY_NOT_FOUND',
+                );
+            }
+
+            $this->activityRepository->delete($activityEntity);
+
+            $this->transactionManager->commit();
+
+            $this->eventDispatcher->dispatch(new ActivityDeletedEvent(
+                activityId: $id,
+                trackableType: $activityEntity->getTrackableType(),
+                trackableId: $activityEntity->getTrackableId()
+            ));
+
+            return Result::success(
+                data: null,
+                message: 'Activity deleted successfully.',
+            );
+        } catch (\Throwable $exception) {
+            $this->transactionManager->rollback();
+
+            $this->logger->error('Activity deletion failed.', [
+                'id' => $id,
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            return Result::failure(
+                message: 'Failed to delete the activity. Please try again.',
+                errorCode: 'ACTIVITY_DELETE_FAILED',
             );
         }
     }

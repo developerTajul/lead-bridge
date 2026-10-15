@@ -66,4 +66,13 @@ interface ActivityRepositoryContract
      * @return ActivityEntity|null Null when the activity no longer exists.
      */
     public function update(int $id, ActivityUpdateData $activityUpdateData): ?ActivityEntity;
+
+    /**
+     * Deletes an activity.
+     *
+     * @param ActivityEntity $activity
+     *
+     * @return void
+     */
+    public function delete(ActivityEntity $activity): void;
 }

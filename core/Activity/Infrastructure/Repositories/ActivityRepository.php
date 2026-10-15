@@ -183,4 +183,14 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
 
         return $this->mapper->toEntity($activityModel->toArray());
     }
+
+    /**
+     * @param ActivityEntity $activity
+     *
+     * @return void
+     */
+    public function delete(ActivityEntity $activity): void
+    {
+        $this->deleteRecord((int) $activity->getId());
+    }
 }

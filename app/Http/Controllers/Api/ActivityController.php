@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Activity\StoreActivityRequest;
-use App\Models\Activity;
 use Core\Activity\Application\Contracts\ActivityMapperContract;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Services\ActivityService;
@@ -134,22 +133,21 @@ class ActivityController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id): JsonResponse
+    public function destroy(int $id): JsonResponse
     {
-        $activity = Activity::find($id);
+        $result = $this->activityService->deleteActivity($id);
 
-        if (! $activity) {
+        if (! $result->success) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Activity not found.',
+                'message' => $result->message,
+                'error_code' => $result->errorCode,
             ], Response::HTTP_NOT_FOUND);
         }
 
-        $activity->delete();
-
         return response()->json([
             'status'  => 'success',
-            'message' => 'Activity deleted successfully.',
+            'message' => $result->message,
         ], Response::HTTP_OK);
     }
 }

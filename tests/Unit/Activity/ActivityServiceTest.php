@@ -13,6 +13,7 @@ use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\DataObjects\ActivityUpdateData;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\Events\ActivityDeletedEvent;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
 use PHPUnit\Framework\TestCase;
@@ -276,6 +277,108 @@ final class ActivityServiceTest extends TestCase
 
         $this->assertTrue($result->isFailure());
         $this->assertSame('ACTIVITY_UPDATE_FAILED', $result->errorCode);
+    }
+
+    // ---------------------------------------------------------------------
+    // deleteActivity()
+    // ---------------------------------------------------------------------
+
+    public function test_delete_returns_success_result(): void
+    {
+        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->expects($this->once())->method('delete');
+
+        $result = $this->activityService->deleteActivity(1);
+
+        $this->assertTrue($result->isSuccess());
+        $this->assertSame('Activity deleted successfully.', $result->message);
+        $this->assertNull($result->data);
+    }
+
+    public function test_delete_passes_the_found_entity_to_the_repository(): void
+    {
+        $entity = $this->makeEntity();
+        $this->activityRepository->method('findById')->willReturn($entity);
+
+        $captured = null;
+        $this->activityRepository->expects($this->once())
+            ->method('delete')
+            ->willReturnCallback(function (ActivityEntity $activity) use (&$captured) {
+                $captured = $activity;
+            });
+
+        $this->activityService->deleteActivity(1);
+
+        $this->assertSame($entity, $captured);
+    }
+
+    public function test_delete_commits_the_transaction_on_success(): void
+    {
+        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+
+        $this->transactionManager->expects($this->once())->method('beginTransaction');
+        $this->transactionManager->expects($this->once())->method('commit');
+        $this->transactionManager->expects($this->never())->method('rollback');
+
+        $result = $this->activityService->deleteActivity(1);
+
+        $this->assertTrue($result->isSuccess());
+    }
+
+    public function test_delete_dispatches_the_deleted_event_after_commit(): void
+    {
+        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+
+        $this->eventDispatcher->expects($this->once())
+            ->method('dispatch')
+            ->with($this->isInstanceOf(ActivityDeletedEvent::class));
+
+        $this->activityService->deleteActivity(1);
+    }
+
+    public function test_delete_returns_failure_when_activity_is_missing(): void
+    {
+        $this->activityRepository->method('findById')->willReturn(null);
+
+        $this->transactionManager->expects($this->once())->method('beginTransaction');
+        $this->transactionManager->expects($this->once())->method('rollback');
+        $this->transactionManager->expects($this->never())->method('commit');
+        $this->activityRepository->expects($this->never())->method('delete');
+        $this->eventDispatcher->expects($this->never())->method('dispatch');
+
+        $result = $this->activityService->deleteActivity(999);
+
+        $this->assertTrue($result->isFailure());
+        $this->assertSame('ACTIVITY_NOT_FOUND', $result->errorCode);
+        $this->assertNull($result->data);
+    }
+
+    public function test_delete_rolls_back_and_returns_failure_when_repository_throws(): void
+    {
+        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('delete')
+            ->willThrowException(new RuntimeException('Database is down.'));
+
+        $this->transactionManager->expects($this->once())->method('beginTransaction');
+        $this->transactionManager->expects($this->once())->method('rollback');
+        $this->transactionManager->expects($this->never())->method('commit');
+
+        $result = $this->activityService->deleteActivity(1);
+
+        $this->assertTrue($result->isFailure());
+        $this->assertSame('ACTIVITY_DELETE_FAILED', $result->errorCode);
+        $this->assertNull($result->data);
+    }
+
+    public function test_delete_does_not_dispatch_the_event_when_repository_throws(): void
+    {
+        $this->activityRepository->method('findById')->willReturn($this->makeEntity());
+        $this->activityRepository->method('delete')
+            ->willThrowException(new RuntimeException('Database is down.'));
+
+        $this->eventDispatcher->expects($this->never())->method('dispatch');
+
+        $this->activityService->deleteActivity(1);
     }
 
     private function makeCreateDTO(): ActivityCreateDTO
