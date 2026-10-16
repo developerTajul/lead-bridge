@@ -17,6 +17,12 @@ use LogicException;
  */
 final class ActivityEntity
 {
+    /**
+     * How far ahead of the server clock a completion time may sit. Absorbs
+     * client clock drift, so a slightly fast client is not rejected.
+     */
+    private const CLOCK_SKEW_TOLERANCE_SECONDS = 60;
+
     /** @var array<int, object> */
     private array $recordedEvents = [];
 
@@ -253,10 +259,9 @@ final class ActivityEntity
     }
 
     /**
-     * Applies an update payload. A null field stays unchanged, a clear flag
-     * drops it, completedAt completes the activity and reopen clears an
-     * existing completion. The whole payload is validated up front including
-     * the completion, so a rejected update leaves the activity untouched.
+     * Applies an update payload. A null field stays unchanged; a clear flag
+     * drops it. The whole payload is validated before anything is applied, so a
+     * rejected update leaves the activity untouched.
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
@@ -312,9 +317,8 @@ final class ActivityEntity
     }
 
     /**
-     * Checks an update payload before any of it is applied. The completion is
-     * checked here rather than when it is applied, so that a payload rejected
-     * for its timing cannot leave the earlier fields already mutated.
+     * Checks an update payload before any of it is applied, so a payload
+     * rejected for its timing cannot leave earlier fields already mutated.
      *
      * @param string|null            $subject
      * @param DateTimeImmutable|null $dueDate
@@ -398,7 +402,9 @@ final class ActivityEntity
     {
         $now ??= new DateTimeImmutable();
 
-        if ($completedAt > $now) {
+        // A client clock can run slightly ahead of the server, so a moment
+        // within the tolerance is treated as "now" rather than rejected.
+        if ($completedAt > $now->modify(sprintf('+%d seconds', self::CLOCK_SKEW_TOLERANCE_SECONDS))) {
             throw InvalidActivityException::completionInTheFuture($completedAt, $now);
         }
     }

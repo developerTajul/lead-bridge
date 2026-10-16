@@ -6,6 +6,7 @@ namespace Tests\Unit\Activity;
 
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Mappers\ActivityMapper;
+use Core\Activity\Domain\ActivityRules;
 use Core\Activity\Domain\Enums\ActivityPeriod;
 use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
@@ -134,8 +135,8 @@ final class ActivityFilterValidationTest extends TestCase
     {
         $this->assertSame(1, $this->mapper->mapToFilterDTO(['per_page' => '1'])->perPage);
         $this->assertSame(
-            ActivityFilter::MAX_PER_PAGE,
-            $this->mapper->mapToFilterDTO(['per_page' => (string) ActivityFilter::MAX_PER_PAGE])->perPage,
+            ActivityRules::MAX_PER_PAGE,
+            $this->mapper->mapToFilterDTO(['per_page' => (string) ActivityRules::MAX_PER_PAGE])->perPage,
         );
     }
 
@@ -204,10 +205,10 @@ final class ActivityFilterValidationTest extends TestCase
     public function test_the_lenient_path_keeps_a_page_size_on_the_bound(): void
     {
         [$dto, $ignored] = $this->mapper->mapToFilterDTOLenient([
-            'per_page' => (string) ActivityFilter::MAX_PER_PAGE,
+            'per_page' => (string) ActivityRules::MAX_PER_PAGE,
         ]);
 
-        $this->assertSame(ActivityFilter::MAX_PER_PAGE, $dto->perPage);
+        $this->assertSame(ActivityRules::MAX_PER_PAGE, $dto->perPage);
         $this->assertSame([], $ignored);
     }
 
@@ -237,7 +238,7 @@ final class ActivityFilterValidationTest extends TestCase
 
     public function test_the_domain_filter_accepts_the_upper_page_size_bound(): void
     {
-        $filter = new ActivityFilter(perPage: ActivityFilter::MAX_PER_PAGE);
+        $filter = new ActivityFilter(perPage: ActivityRules::MAX_PER_PAGE);
 
         $this->assertSame(100, $filter->perPage);
     }

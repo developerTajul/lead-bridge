@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ActivityStoreRequest;
 use Core\Activity\Application\Contracts\ActivityMapperContract;
 use Core\Activity\Application\Services\ActivityService;
+use Core\Activity\Domain\ActivityRules;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,8 +20,6 @@ use Illuminate\View\View;
 final class ActivityController extends Controller
 {
     private const DEFAULT_PER_PAGE = 10;
-
-    private const MAX_PER_PAGE = 100;
 
     private const INVALID_FILTER_WARNING = 'Invalid filter applied. Showing unfiltered results.';
 
@@ -43,7 +42,7 @@ final class ActivityController extends Controller
         $queryParams = $request->query();
         $queryParams['per_page'] = min(
             (int) $request->input('per_page', self::DEFAULT_PER_PAGE),
-            self::MAX_PER_PAGE,
+            ActivityRules::MAX_PER_PAGE,
         );
 
         [$filterDTO, $ignoredFilters] = $this->mapper->mapToFilterDTOLenient($queryParams);

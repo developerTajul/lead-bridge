@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\ValueObjects;
 
+use Core\Activity\Domain\ActivityRules;
 use Core\Activity\Domain\Enums\ActivityPeriod;
 use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
@@ -15,8 +16,6 @@ use Core\Activity\Domain\Exceptions\InvalidActivityException;
  */
 final readonly class ActivityFilter
 {
-    public const MAX_PER_PAGE = 100;
-
     /**
      * @param ActivityStatus|null $status
      * @param ActivityType|null   $type
@@ -33,7 +32,7 @@ final readonly class ActivityFilter
         public ?ActivityPeriod $period = null,
         public int $perPage = 15,
     ) {
-        if ($perPage < 1 || $perPage > self::MAX_PER_PAGE) {
+        if ($perPage < ActivityRules::MIN_PER_PAGE || $perPage > ActivityRules::MAX_PER_PAGE) {
             throw InvalidActivityException::invalidPerPage($perPage);
         }
     }

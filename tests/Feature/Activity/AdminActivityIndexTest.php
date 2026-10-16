@@ -7,6 +7,7 @@ namespace Tests\Feature\Activity;
 use App\Models\User;
 use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
+use Core\Activity\Domain\ActivityRules;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityPeriod;
 use Core\Activity\Domain\Enums\ActivityStatus;
@@ -164,7 +165,7 @@ final class AdminActivityIndexTest extends TestCase
             ->get(route('admin.activities.index', ['per_page' => 500]));
 
         $response->assertOk();
-        $this->assertSame(ActivityFilter::MAX_PER_PAGE, $this->receivedFilters[0]->perPage);
+        $this->assertSame(ActivityRules::MAX_PER_PAGE, $this->receivedFilters[0]->perPage);
     }
 
     public function test_index_shows_no_warning_when_every_filter_is_usable(): void

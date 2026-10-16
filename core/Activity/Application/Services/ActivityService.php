@@ -28,6 +28,18 @@ final class ActivityService
 {
     private const ERROR_INVALID = 'ACTIVITY_INVALID';
 
+    private const ERROR_NOT_FOUND = 'ACTIVITY_NOT_FOUND';
+
+    private const ERROR_CREATE_FAILED = 'ACTIVITY_CREATE_FAILED';
+
+    private const ERROR_UPDATE_FAILED = 'ACTIVITY_UPDATE_FAILED';
+
+    private const ERROR_DELETE_FAILED = 'ACTIVITY_DELETE_FAILED';
+
+    private const ERROR_FETCH_FAILED = 'ACTIVITY_FETCH_FAILED';
+
+    private const ERROR_INDEX_FAILED = 'ACTIVITY_INDEX_FAILED';
+
     public function __construct(
         private readonly ActivityRepositoryContract $activityRepository,
         private readonly ActivityQueryContract $activityQuery,
@@ -88,7 +100,7 @@ final class ActivityService
 
             return Result::failure(
                 message: 'Failed to create the activity. Please try again.',
-                errorCode: 'ACTIVITY_CREATE_FAILED',
+                errorCode: self::ERROR_CREATE_FAILED,
             );
         }
 
@@ -134,7 +146,7 @@ final class ActivityService
             return Result::failure($exception->getMessage(), self::ERROR_INVALID);
         } catch (\Throwable $exception) {
             $this->logger->error('Failed to retrieve activities.', ['exception' => $exception]);
-            return Result::failure('Failed to retrieve activities.', 'ACTIVITY_INDEX_FAILED');
+            return Result::failure('Failed to retrieve activities.', self::ERROR_INDEX_FAILED);
         }
     }
 
@@ -146,7 +158,7 @@ final class ActivityService
             $activityProjection = $this->activityQuery->findById($id);
 
             if (! $activityProjection) {
-                return Result::failure('Activity not found.', 'ACTIVITY_NOT_FOUND');
+                return Result::failure('Activity not found.', self::ERROR_NOT_FOUND);
             }
 
             $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($activityProjection);
@@ -157,7 +169,7 @@ final class ActivityService
             );
         } catch (\Throwable $exception) {
             $this->logger->error('Failed to retrieve activity.', ['id' => $id, 'exception' => $exception]);
-            return Result::failure('Failed to retrieve activity.', 'ACTIVITY_FETCH_FAILED');
+            return Result::failure('Failed to retrieve activity.', self::ERROR_FETCH_FAILED);
         }
     }
 
@@ -183,7 +195,7 @@ final class ActivityService
 
                 return Result::failure(
                     message: "Activity not found with ID: {$activityUpdateDTO->id}",
-                    errorCode: 'ACTIVITY_NOT_FOUND',
+                    errorCode: self::ERROR_NOT_FOUND,
                 );
             }
 
@@ -230,7 +242,7 @@ final class ActivityService
 
             return Result::failure(
                 message: 'Failed to update the activity. Please try again.',
-                errorCode: 'ACTIVITY_UPDATE_FAILED',
+                errorCode: self::ERROR_UPDATE_FAILED,
             );
         }
 
@@ -267,7 +279,7 @@ final class ActivityService
 
                 return Result::failure(
                     message: "Activity not found with ID: {$id}",
-                    errorCode: 'ACTIVITY_NOT_FOUND',
+                    errorCode: self::ERROR_NOT_FOUND,
                 );
             }
 
@@ -294,7 +306,7 @@ final class ActivityService
 
             return Result::failure(
                 message: 'Failed to delete the activity. Please try again.',
-                errorCode: 'ACTIVITY_DELETE_FAILED',
+                errorCode: self::ERROR_DELETE_FAILED,
             );
         }
 

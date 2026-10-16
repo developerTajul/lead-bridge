@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\Exceptions;
 
-use Core\Activity\Domain\ValueObjects\ActivityFilter;
+use Core\Activity\Domain\ActivityRules;
 use RuntimeException;
 
 /**
@@ -79,8 +79,9 @@ final class InvalidActivityException extends RuntimeException
     public static function invalidPerPage(int $perPage): self
     {
         return new self(sprintf(
-            'Page size must be between 1 and %d, %d given.',
-            ActivityFilter::MAX_PER_PAGE,
+            'Page size must be between %d and %d, %d given.',
+            ActivityRules::MIN_PER_PAGE,
+            ActivityRules::MAX_PER_PAGE,
             $perPage,
         ));
     }

@@ -243,6 +243,61 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame($now, $entity->getCompletedAt());
     }
 
+    /**
+     * A client clock that runs slightly fast must not turn a legitimate
+     * completion into a 422, so a moment just inside the skew window is applied.
+     */
+    public function test_mark_completed_accepts_a_moment_inside_the_clock_skew_window(): void
+    {
+        $entity = $this->makeEntity();
+        $now = new \DateTimeImmutable('2026-10-02 11:00:00');
+
+        $entity->markCompleted(
+            completedAt: $now->modify('+60 seconds'),
+            now: $now,
+        );
+
+        $this->assertFalse($entity->isPending());
+    }
+
+    /**
+     * The window is a tolerance, not a licence: past it the completion is still
+     * refused, which is the boundary this pins.
+     */
+    public function test_mark_completed_rejects_a_moment_past_the_clock_skew_window(): void
+    {
+        $entity = $this->makeEntity();
+        $now = new \DateTimeImmutable('2026-10-02 11:00:00');
+
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('An activity cannot be completed in the future');
+
+        $entity->markCompleted(
+            completedAt: $now->modify('+61 seconds'),
+            now: $now,
+        );
+    }
+
+    /**
+     * createNew() shares the same guard, so the tolerance reaches it too.
+     */
+    public function test_create_new_accepts_a_completion_inside_the_clock_skew_window(): void
+    {
+        $now = new \DateTimeImmutable('2026-10-02 11:00:00');
+
+        $entity = ActivityEntity::createNew(
+            trackableType: 'lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+            userId: 7,
+            completedAt: $now->modify('+60 seconds'),
+            now: $now,
+        );
+
+        $this->assertFalse($entity->isPending());
+    }
+
     public function test_reopen_clears_the_completion_time(): void
     {
         $entity = $this->makeCompletedEntity();

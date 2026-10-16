@@ -8,10 +8,10 @@ use Core\Activity\Application\Contracts\ActivityMapperContract;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
+use Core\Activity\Domain\ActivityRules;
 use Core\Activity\Domain\Enums\ActivityPeriod;
 use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
-use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Activity\Domain\ValueObjects\TrackableType;
 use DateTimeImmutable;
 use InvalidArgumentException;
@@ -24,8 +24,6 @@ use InvalidArgumentException;
 final class ActivityMapper implements ActivityMapperContract
 {
     private const DEFAULT_PER_PAGE = 15;
-
-    private const MIN_PER_PAGE = 1;
 
     /**
      * Builds an ActivityCreateDTO from validated input.
@@ -62,8 +60,10 @@ final class ActivityMapper implements ActivityMapperContract
      */
     public function mapToUpdateDTO(int $id, array $validatedData): ActivityUpdateDTO
     {
-        // A key that is absent means "leave unchanged"; a key that is present
-        // but null is an explicit request to clear that field.
+        // An absent key and a null value both mean "leave unchanged" for every
+        // field. Clearing a nullable field is a separate intent, carried by the
+        // clear flags below rather than by a null, so that a client can send
+        // description: null without dropping the stored description.
         $clearsDueDate = array_key_exists('due_date', $validatedData)
             && $this->isBlank($validatedData['due_date']);
         $clearsDescription = array_key_exists('description', $validatedData)
@@ -315,12 +315,12 @@ final class ActivityMapper implements ActivityMapperContract
 
         $pageSize = (int) $perPage;
 
-        if ($pageSize < self::MIN_PER_PAGE || $pageSize > ActivityFilter::MAX_PER_PAGE) {
+        if ($pageSize < ActivityRules::MIN_PER_PAGE || $pageSize > ActivityRules::MAX_PER_PAGE) {
             throw new InvalidArgumentException(sprintf(
                 'Unsupported value [%s] for filter [per_page]. Page size must be between %d and %d.',
                 (string) $pageSize,
-                self::MIN_PER_PAGE,
-                ActivityFilter::MAX_PER_PAGE,
+                ActivityRules::MIN_PER_PAGE,
+                ActivityRules::MAX_PER_PAGE,
             ));
         }
 
