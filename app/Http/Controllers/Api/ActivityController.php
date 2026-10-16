@@ -7,6 +7,7 @@ use App\Http\Requests\Activity\StoreActivityRequest;
 use Core\Activity\Application\Contracts\ActivityMapperContract;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Services\ActivityService;
+use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,13 +26,21 @@ class ActivityController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $filterDTO = new ActivityFilterDTO(
-            status: $request->input('status'),
-            type: $request->input('type'),
-            userId: $request->filled('user_id') ? $request->integer('user_id') : null,
-            filter: $request->input('filter'),
-            perPage: (int) $request->input('per_page', 15)
-        );
+        try {
+            $filterDTO = ActivityFilterDTO::fromRequest(
+                status: $request->input('status'),
+                type: $request->input('type'),
+                userId: $request->filled('user_id') ? $request->integer('user_id') : null,
+                filter: $request->input('filter'),
+                perPage: $request->input('per_page', 15),
+            );
+        } catch (InvalidActivityException $exception) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $exception->getMessage(),
+                'error_code' => self::ERROR_INVALID,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         $result = $this->activityService->getActivities($filterDTO);
 

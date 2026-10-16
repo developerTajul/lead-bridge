@@ -12,6 +12,8 @@ use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Application\Services\ActivityService;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\Enums\ActivityPeriod;
+use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
@@ -100,7 +102,7 @@ final class ActivityIndexTest extends TestCase
                 return $this->makePaginatedResult();
             });
 
-        $this->activityService->getActivities(new ActivityFilterDTO(
+        $this->activityService->getActivities(ActivityFilterDTO::fromRequest(
             status: 'pending',
             type: 'call',
             userId: 7,
@@ -109,10 +111,10 @@ final class ActivityIndexTest extends TestCase
         ));
 
         $this->assertNotNull($captured);
-        $this->assertSame('pending', $captured->status);
-        $this->assertSame('call', $captured->type);
+        $this->assertSame(ActivityStatus::PENDING, $captured->status);
+        $this->assertSame(ActivityType::CALL, $captured->type);
         $this->assertSame(7, $captured->userId);
-        $this->assertSame('today', $captured->period);
+        $this->assertSame(ActivityPeriod::TODAY, $captured->period);
         $this->assertSame(25, $captured->perPage);
     }
 

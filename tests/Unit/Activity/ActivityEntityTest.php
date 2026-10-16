@@ -317,19 +317,59 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('New subject', $entity->getSubject());
     }
 
-    public function test_apply_changes_prefers_the_reopen_flag_over_a_completion_time(): void
+    public function test_apply_changes_rejects_a_payload_that_both_completes_and_reopens(): void
     {
         $entity = $this->makeEntity();
-        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
 
-        // Reopening wins: the activity must not be silently re-completed.
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('cannot be completed and reopened by the same update');
+
         $entity->applyChanges(
             completedAt: new \DateTimeImmutable('2026-10-03 11:00:00'),
             reopen: true,
         );
+    }
+
+    public function test_apply_changes_leaves_the_activity_untouched_when_the_payload_conflicts(): void
+    {
+        $entity = $this->makeEntity();
+
+        try {
+            $entity->applyChanges(
+                subject: 'Should not be applied',
+                completedAt: new \DateTimeImmutable('2026-10-03 11:00:00'),
+                reopen: true,
+            );
+        } catch (InvalidActivityException) {
+            // Rejected as a whole; nothing below may have been mutated.
+        }
 
         $this->assertTrue($entity->isPending());
         $this->assertNull($entity->getCompletedAt());
+        $this->assertSame('Discovery call', $entity->getSubject());
+    }
+
+    public function test_apply_changes_leaves_the_activity_untouched_when_the_subject_is_invalid(): void
+    {
+        $entity = $this->makeEntity();
+        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+
+        try {
+            // The completion would be legal on its own; the blank subject is
+            // what rejects the payload, and it must reject it before any state
+            // transition has run.
+            $entity->applyChanges(
+                subject: '',
+                type: ActivityType::MEETING,
+                reopen: true,
+            );
+        } catch (InvalidActivityException) {
+            // Rejected before mutation.
+        }
+
+        $this->assertFalse($entity->isPending());
+        $this->assertSame('2026-10-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+        $this->assertSame(ActivityType::CALL, $entity->getType());
     }
 
     public function test_apply_changes_keeps_the_completion_when_nothing_is_supplied(): void

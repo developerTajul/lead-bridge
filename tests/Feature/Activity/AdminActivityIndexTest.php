@@ -8,6 +8,8 @@ use App\Models\User;
 use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\Enums\ActivityPeriod;
+use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -62,10 +64,10 @@ final class AdminActivityIndexTest extends TestCase
 
         $filter = $this->receivedFilters[0];
 
-        $this->assertSame('pending', $filter->status);
-        $this->assertSame('call', $filter->type);
+        $this->assertSame(ActivityStatus::PENDING, $filter->status);
+        $this->assertSame(ActivityType::CALL, $filter->type);
         $this->assertSame(7, $filter->userId);
-        $this->assertSame('today', $filter->period);
+        $this->assertSame(ActivityPeriod::TODAY, $filter->period);
         $this->assertSame(25, $filter->perPage);
     }
 
@@ -129,6 +131,35 @@ final class AdminActivityIndexTest extends TestCase
         $response->assertOk();
         $response->assertSee('Kickoff meeting');
         $response->assertSee('Completed');
+    }
+
+    public function test_index_falls_back_to_an_unfiltered_list_for_a_bogus_filter(): void
+    {
+        $this->actingAs($this->makeUser())->get(route('admin.activities.index', [
+            'status' => 'bogus',
+        ]));
+
+        // The page still renders, and the unusable value is dropped.
+        $this->assertCount(1, $this->receivedFilters);
+        $this->assertNull($this->receivedFilters[0]->status);
+    }
+
+    public function test_index_warns_the_user_when_it_drops_a_filter(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->get(route('admin.activities.index', ['status' => 'bogus']));
+
+        $response->assertOk();
+        $response->assertSee('Invalid filter applied. Showing unfiltered results.');
+    }
+
+    public function test_index_shows_no_warning_when_every_filter_is_usable(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->get(route('admin.activities.index', ['status' => 'pending']));
+
+        $response->assertOk();
+        $response->assertDontSee('Invalid filter applied');
     }
 
     private function bindRecordingRepository(array $items = []): void

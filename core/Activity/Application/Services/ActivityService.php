@@ -47,7 +47,7 @@ final class ActivityService
         try {
             $this->transactionManager->beginTransaction();
 
-            $activityEntity = ActivityEntity::createNew(
+            $createdEntity = ActivityEntity::createNew(
                 trackableType: $activityCreateDTO->trackableType,
                 trackableId: $activityCreateDTO->trackableId,
                 type: $activityCreateDTO->type,
@@ -58,12 +58,14 @@ final class ActivityService
                 completedAt: $activityCreateDTO->completedAt
             );
 
-            $savedEntity = $this->activityRepository->save($activityEntity);
+            $savedEntity = $this->activityRepository->save($createdEntity);
 
             $activityResponseDTO = $this->activityResponseMapper->toResponseDTO(
                 new ActivityProjectionDTO(entity: $savedEntity)
             );
 
+            // Listeners are dispatched from the saved entity, which is the only
+            // one carrying an ID. The created entity records nothing.
             $savedEntity->recordCreated();
 
             $this->transactionManager->commit();
@@ -90,7 +92,7 @@ final class ActivityService
 
         // The activity is already committed: a failing listener must not turn
         // a successful create into an error response.
-        $this->dispatchRecordedEvents($savedEntity);
+        $this->dispatchEvents($savedEntity->releaseEvents());
 
         return Result::success(
             data: $activityResponseDTO,
@@ -109,7 +111,6 @@ final class ActivityService
                 period: $filterDTO->filter,
                 perPage: $filterDTO->perPage
             );
-
             $paginatedActivities = $this->activityQuery->getFilteredActivities($activityFilter);
 
             $mappedPaginatedResult = $paginatedActivities->map(
@@ -187,11 +188,18 @@ final class ActivityService
             // The mutated entity is handed straight to the repository.
             $updatedActivity = $this->activityRepository->save($activityEntity);
 
+            // save() hydrates a fresh entity, so anything the mutated instance
+            // recorded has to be released before that return value replaces it.
+            // Released after the save so events raised during persistence count.
+            $recordedEvents = $activityEntity->releaseEvents();
+
             $activityResponseDTO = $this->activityResponseMapper->toResponseDTO(
                 new ActivityProjectionDTO(entity: $updatedActivity)
             );
 
             $this->transactionManager->commit();
+
+            $this->dispatchEvents($recordedEvents);
 
             return Result::success(
                 data: $activityResponseDTO,
@@ -229,6 +237,8 @@ final class ActivityService
      */
     public function deleteActivity(int $id): Result
     {
+        $recordedEvents = [];
+
         try {
             $this->transactionManager->beginTransaction();
 
@@ -245,6 +255,10 @@ final class ActivityService
             }
 
             $activityEntity->recordDeleted();
+
+            // delete() does not hand back a hydrated entity, but the events are
+            // released here anyway so every write path drains the same way.
+            $recordedEvents = $activityEntity->releaseEvents();
 
             $this->activityRepository->delete($activityEntity);
 
@@ -266,7 +280,7 @@ final class ActivityService
 
         // The activity is already committed: a failing listener must not turn
         // a successful delete into an error response.
-        $this->dispatchRecordedEvents($activityEntity);
+        $this->dispatchEvents($recordedEvents);
 
         return Result::success(
             data: null,
@@ -275,17 +289,17 @@ final class ActivityService
     }
 
     /**
-     * Dispatches the events the entity recorded. Runs after the transaction
-     * commits, and a listener failure is logged rather than surfaced, so it
-     * cannot override an already-persisted change.
+     * Dispatches already-released events after the transaction commits. A
+     * listener failure is logged rather than surfaced, so it cannot override
+     * an already-persisted change.
      *
-     * @param ActivityEntity $activityEntity
+     * @param array<int, object> $events
      *
      * @return void
      */
-    private function dispatchRecordedEvents(ActivityEntity $activityEntity): void
+    private function dispatchEvents(array $events): void
     {
-        foreach ($activityEntity->releaseEvents() as $event) {
+        foreach ($events as $event) {
             try {
                 $this->eventDispatcher->dispatch($event);
             } catch (\Throwable $exception) {

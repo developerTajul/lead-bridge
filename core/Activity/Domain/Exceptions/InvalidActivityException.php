@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\Exceptions;
 
+use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use RuntimeException;
 
 /**
@@ -51,6 +52,45 @@ final class InvalidActivityException extends RuntimeException
     public static function alreadyCompleted(): self
     {
         return new self('The activity is already completed.');
+    }
+
+    /**
+     * Reports a list filter value that is not recognised.
+     *
+     * @param string $field
+     * @param string $value
+     *
+     * @return self
+     */
+    public static function invalidFilterValue(string $field, string $value): self
+    {
+        return new self(sprintf('Unsupported value [%s] for filter [%s].', $value, $field));
+    }
+
+    /**
+     * Reports a page size outside the supported range.
+     *
+     * @param int $perPage
+     *
+     * @return self
+     */
+    public static function invalidPerPage(int $perPage): self
+    {
+        return new self(sprintf(
+            'Page size must be between 1 and %d, %d given.',
+            ActivityFilter::MAX_PER_PAGE,
+            $perPage,
+        ));
+    }
+
+    /**
+     * Reports a payload that both completes and reopens an activity.
+     *
+     * @return self
+     */
+    public static function conflictingCompletionAndReopen(): self
+    {
+        return new self('An activity cannot be completed and reopened by the same update.');
     }
 
     /**

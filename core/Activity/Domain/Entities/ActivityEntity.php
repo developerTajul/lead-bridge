@@ -10,6 +10,7 @@ use Core\Activity\Domain\Events\ActivityDeletedEvent;
 use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use Core\Activity\Domain\ValueObjects\TrackableType;
 use DateTimeImmutable;
+use LogicException;
 
 /**
  * Domain entity representing an activity.
@@ -88,11 +89,13 @@ final class ActivityEntity
      * the stored activity rather than one that was rejected.
      *
      * @return void
+     *
+     * @throws LogicException When the activity has not been persisted yet.
      */
     public function recordCreated(): void
     {
         $this->record(new ActivityCreatedEvent(
-            activityId: (int) $this->id,
+            activityId: $this->requireId(),
             trackableType: $this->trackableType->toString(),
             trackableId: $this->trackableId,
         ));
@@ -102,14 +105,32 @@ final class ActivityEntity
      * Records that this activity is about to be removed.
      *
      * @return void
+     *
+     * @throws LogicException When the activity has not been persisted yet.
      */
     public function recordDeleted(): void
     {
         $this->record(new ActivityDeletedEvent(
-            activityId: (int) $this->id,
+            activityId: $this->requireId(),
             trackableType: $this->trackableType->toString(),
             trackableId: $this->trackableId,
         ));
+    }
+
+    /**
+     * Returns the persisted ID, refusing to build an event around a null one.
+     *
+     * @return int
+     *
+     * @throws LogicException When the activity has no ID.
+     */
+    private function requireId(): int
+    {
+        if ($this->id === null) {
+            throw new LogicException('Cannot record event for an entity without an ID.');
+        }
+
+        return $this->id;
     }
 
     /**
@@ -221,7 +242,8 @@ final class ActivityEntity
     /**
      * Applies an update payload. Null fields stay unchanged; a completion
      * time marks the activity completed, and the reopen flag clears an
-     * existing completion.
+     * existing completion. Every value is validated before the entity is
+     * mutated, so a rejected payload leaves the activity untouched.
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
@@ -242,11 +264,7 @@ final class ActivityEntity
         ?DateTimeImmutable $completedAt = null,
         bool $reopen = false
     ): void {
-        if ($reopen) {
-            $this->reopen();
-        } elseif ($completedAt !== null) {
-            $this->markCompleted($completedAt);
-        }
+        $this->assertUpdateIsApplicable($subject, $completedAt, $reopen);
 
         $this->updateDetails(
             subject: $subject,
@@ -254,6 +272,56 @@ final class ActivityEntity
             description: $description,
             dueDate: $dueDate,
         );
+
+        if ($reopen) {
+            $this->reopen();
+
+            return;
+        }
+
+        if ($completedAt !== null) {
+            $this->markCompleted($completedAt);
+        }
+    }
+
+    /**
+     * Checks an update payload before any of it is applied.
+     *
+     * @param string|null            $subject
+     * @param DateTimeImmutable|null $completedAt
+     * @param bool                   $reopen
+     *
+     * @return void
+     *
+     * @throws InvalidActivityException When the payload is contradictory or breaks an invariant.
+     */
+    private function assertUpdateIsApplicable(
+        ?string $subject,
+        ?DateTimeImmutable $completedAt,
+        bool $reopen
+    ): void {
+        if ($subject !== null && trim($subject) === '') {
+            throw InvalidActivityException::emptySubject();
+        }
+
+        // Reopening clears the completion, so asking for both is contradictory.
+        if ($reopen && $completedAt !== null) {
+            throw InvalidActivityException::conflictingCompletionAndReopen();
+        }
+
+        if ($reopen) {
+            return;
+        }
+
+        if ($completedAt === null) {
+            return;
+        }
+
+        if (! $this->isPending()) {
+            throw InvalidActivityException::alreadyCompleted();
+        }
+
+        self::assertCompletable($completedAt);
     }
 
     /**

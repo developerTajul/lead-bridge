@@ -23,6 +23,8 @@ final class ActivityController extends Controller
 
     private const MAX_PER_PAGE = 100;
 
+    private const INVALID_FILTER_WARNING = 'Invalid filter applied. Showing unfiltered results.';
+
     public function __construct(
         private readonly ActivityService $activities,
         private readonly ActivityMapperContract $mapper,
@@ -37,15 +39,19 @@ final class ActivityController extends Controller
      */
     public function index(Request $request): View
     {
-        $perPage = min((int) $request->input('per_page', self::DEFAULT_PER_PAGE), self::MAX_PER_PAGE);
-
-        $filterDTO = new ActivityFilterDTO(
+        // A stale bookmark or hand-edited URL must not break the list, so an
+        // unusable filter value is dropped and reported instead of rejected.
+        [$filterDTO, $ignoredFilters] = ActivityFilterDTO::fromRequestLenient(
             status: $request->input('status'),
             type: $request->input('type'),
             userId: $request->filled('user_id') ? $request->integer('user_id') : null,
             filter: $request->input('filter'),
-            perPage: $perPage
+            perPage: min((int) $request->input('per_page', self::DEFAULT_PER_PAGE), self::MAX_PER_PAGE),
         );
+
+        if ($ignoredFilters !== []) {
+            session()->flash('warning', self::INVALID_FILTER_WARNING);
+        }
 
         $result = $this->activities->getActivities($filterDTO);
 

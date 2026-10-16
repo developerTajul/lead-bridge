@@ -9,6 +9,8 @@ use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\Enums\ActivityPeriod;
+use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Activity\Infrastructure\Mappers\ActivityEntityMapper;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
@@ -95,23 +97,23 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     {
         $query = Activity::with(['user', 'trackable']);
 
-        if ($filter->status === 'pending') {
+        if ($filter->status === ActivityStatus::PENDING) {
             $query->whereNull('completed_at');
-        } elseif ($filter->status === 'completed') {
+        } elseif ($filter->status === ActivityStatus::COMPLETED) {
             $query->whereNotNull('completed_at');
         }
 
         if ($filter->type !== null) {
-            $query->where('type', $filter->type);
+            $query->where('type', $filter->type->value);
         }
 
         if ($filter->userId !== null) {
             $query->where('user_id', $filter->userId);
         }
 
-        if ($filter->period === 'today') {
+        if ($filter->period === ActivityPeriod::TODAY) {
             $query->whereDate('due_date', now()->toDateString());
-        } elseif ($filter->period === 'overdue') {
+        } elseif ($filter->period === ActivityPeriod::OVERDUE) {
             // SQL form of ActivityEntity::isOverdue(): pending and past due.
             $query->whereNull('completed_at')
                   ->where('due_date', '<', now());

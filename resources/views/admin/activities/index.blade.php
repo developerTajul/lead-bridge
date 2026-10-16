@@ -30,6 +30,13 @@
                 </div>
             @endif
 
+            @if (session('warning'))
+                <div class="m-6 mb-0 flex items-start gap-2 px-4 py-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+                    <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+                    <span>{{ session('warning') }}</span>
+                </div>
+            @endif
+
             <div class="px-6 pt-6 pb-4 border-b border-gray-100">
                 <div>
                     <span class="px-2.5 py-1 text-xs font-semibold text-indigo-800 bg-indigo-50 rounded-md">activities Table</span>
