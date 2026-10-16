@@ -154,7 +154,13 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
                   ->where('due_date', '<', now());
         }
 
-        $eloquentPaginator = $query->orderBy('due_date', 'asc')->paginate($filter->perPage);
+        // The id tie-breaks rows sharing a due_date. Without it the order of
+        // equal keys is undefined, so a paginated offset can repeat a row on
+        // one page and skip another.
+        $eloquentPaginator = $query
+            ->orderBy('due_date', 'asc')
+            ->orderBy('id', 'asc')
+            ->paginate($filter->perPage);
 
         $entities = $eloquentPaginator
             ->getCollection()
