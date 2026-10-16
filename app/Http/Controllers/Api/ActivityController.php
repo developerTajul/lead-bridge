@@ -108,7 +108,9 @@ class ActivityController extends Controller
             'type'         => ['sometimes', 'required', 'string', 'in:call,meeting,email,task'],
             'description'  => ['sometimes', 'nullable', 'string'],
             'due_date'     => ['sometimes', 'nullable', 'date'],
-            'completed_at' => ['sometimes', 'nullable', 'date'],
+            // Reopening clears the completion, so an active reopen flag and a
+            // completion time cannot travel together.
+            'completed_at' => ['sometimes', 'nullable', 'date', 'prohibited_if:reopen,true,1'],
             'reopen'       => ['sometimes', 'boolean'],
         ]);
 
