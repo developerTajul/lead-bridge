@@ -8,6 +8,7 @@ use Core\Activity\Application\Contracts\ActivityMapperContract;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
 use Core\Activity\Domain\Enums\ActivityType;
+use DateTimeImmutable;
 
 /**
  * Maps validated request input to Activity DTOs.
@@ -32,8 +33,8 @@ final class ActivityMapper implements ActivityMapperContract
             subject: (string) $validatedData['subject'],
             userId: isset($validatedData['user_id']) ? (int) $validatedData['user_id'] : null,
             description: $validatedData['description'] ?? null,
-            dueDate: $validatedData['due_date'] ?? null,
-            completedAt: $validatedData['completed_at'] ?? null,
+            dueDate: $this->toDateTime($validatedData['due_date'] ?? null),
+            completedAt: $this->toDateTime($validatedData['completed_at'] ?? null),
         );
     }
 
@@ -54,9 +55,30 @@ final class ActivityMapper implements ActivityMapperContract
                 ? ActivityType::from($validatedData['type'])
                 : null,
             description: $validatedData['description'] ?? null,
-            dueDate: $validatedData['due_date'] ?? null,
-            completedAt: $validatedData['completed_at'] ?? null,
+            dueDate: $this->toDateTime($validatedData['due_date'] ?? null),
+            completedAt: $this->toDateTime($validatedData['completed_at'] ?? null),
             reopen: (bool) ($validatedData['reopen'] ?? false),
         );
+    }
+
+    /**
+     * Parses a validated date value, so malformed input fails here rather
+     * than inside the Service.
+     *
+     * @param mixed $value
+     *
+     * @return DateTimeImmutable|null
+     */
+    private function toDateTime(mixed $value): ?DateTimeImmutable
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof DateTimeImmutable) {
+            return $value;
+        }
+
+        return new DateTimeImmutable((string) $value);
     }
 }

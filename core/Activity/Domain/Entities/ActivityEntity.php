@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Core\Activity\Domain\Entities;
 
 use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\Events\ActivityCreatedEvent;
+use Core\Activity\Domain\Events\ActivityDeletedEvent;
 use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use Core\Activity\Domain\ValueObjects\TrackableType;
 use DateTimeImmutable;
@@ -14,6 +16,9 @@ use DateTimeImmutable;
  */
 final class ActivityEntity
 {
+    /** @var array<int, object> */
+    private array $recordedEvents = [];
+
     private function __construct(
         private readonly ?int $id,
         private readonly TrackableType $trackableType,
@@ -72,6 +77,61 @@ final class ActivityEntity
             dueDate: $dueDate,
             completedAt: $completedAt
         );
+    }
+
+    /**
+     * Records that this activity has been persisted, so listeners react to
+     * the stored activity rather than one that was rejected.
+     *
+     * @return void
+     */
+    public function recordCreated(): void
+    {
+        $this->record(new ActivityCreatedEvent(
+            activityId: (int) $this->id,
+            trackableType: $this->trackableType->toString(),
+            trackableId: $this->trackableId,
+        ));
+    }
+
+    /**
+     * Records that this activity is about to be removed.
+     *
+     * @return void
+     */
+    public function recordDeleted(): void
+    {
+        $this->record(new ActivityDeletedEvent(
+            activityId: (int) $this->id,
+            trackableType: $this->trackableType->toString(),
+            trackableId: $this->trackableId,
+        ));
+    }
+
+    /**
+     * Returns the events recorded since the last release, clearing them.
+     *
+     * @return array<int, object>
+     */
+    public function releaseEvents(): array
+    {
+        $events = $this->recordedEvents;
+
+        $this->recordedEvents = [];
+
+        return $events;
+    }
+
+    /**
+     * Records an event raised by this activity.
+     *
+     * @param object $event
+     *
+     * @return void
+     */
+    private function record(object $event): void
+    {
+        $this->recordedEvents[] = $event;
     }
 
     /**

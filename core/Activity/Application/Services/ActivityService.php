@@ -11,13 +11,10 @@ use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
-use Core\Activity\Domain\Events\ActivityCreatedEvent;
-use Core\Activity\Domain\Events\ActivityDeletedEvent;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
-use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -52,8 +49,8 @@ final class ActivityService
                 subject: $activityCreateDTO->subject,
                 userId: $activityCreateDTO->userId,
                 description: $activityCreateDTO->description,
-                dueDate: $activityCreateDTO->dueDate ? new \DateTimeImmutable($activityCreateDTO->dueDate) : null,
-                completedAt: $activityCreateDTO->completedAt ? new \DateTimeImmutable($activityCreateDTO->completedAt) : null
+                dueDate: $activityCreateDTO->dueDate,
+                completedAt: $activityCreateDTO->completedAt
             );
 
             $savedEntity = $this->activityRepository->save($activityEntity);
@@ -62,18 +59,9 @@ final class ActivityService
                 new ActivityProjectionDTO(entity: $savedEntity)
             );
 
+            $savedEntity->recordCreated();
+
             $this->transactionManager->commit();
-
-            $this->eventDispatcher->dispatch(new ActivityCreatedEvent(
-                activityId: $savedEntity->getId(),
-                trackableType: $savedEntity->getTrackableType()->toString(),
-                trackableId: $savedEntity->getTrackableId()
-            ));
-
-            return Result::success(
-                data: $activityResponseDTO,
-                message: 'Activity created successfully.',
-            );
         } catch (\Throwable $exception) {
             $this->transactionManager->rollback();
 
@@ -87,6 +75,15 @@ final class ActivityService
                 errorCode: 'ACTIVITY_CREATE_FAILED',
             );
         }
+
+        // The activity is already committed: a failing listener must not turn
+        // a successful create into an error response.
+        $this->dispatchRecordedEvents($savedEntity);
+
+        return Result::success(
+            data: $activityResponseDTO,
+            message: 'Activity created successfully.',
+        );
     }
 
 
@@ -175,12 +172,8 @@ final class ActivityService
                 subject: $activityUpdateDTO->subject,
                 type: $activityUpdateDTO->type,
                 description: $activityUpdateDTO->description,
-                dueDate: $activityUpdateDTO->dueDate !== null
-                    ? new \DateTimeImmutable($activityUpdateDTO->dueDate)
-                    : null,
-                completedAt: $activityUpdateDTO->completedAt !== null
-                    ? new \DateTimeImmutable($activityUpdateDTO->completedAt)
-                    : null,
+                dueDate: $activityUpdateDTO->dueDate,
+                completedAt: $activityUpdateDTO->completedAt,
                 reopen: $activityUpdateDTO->reopen,
             );
 
@@ -237,20 +230,11 @@ final class ActivityService
                 );
             }
 
+            $activityEntity->recordDeleted();
+
             $this->activityRepository->delete($activityEntity);
 
             $this->transactionManager->commit();
-
-            $this->eventDispatcher->dispatch(new ActivityDeletedEvent(
-                activityId: $id,
-                trackableType: $activityEntity->getTrackableType()->toString(),
-                trackableId: $activityEntity->getTrackableId()
-            ));
-
-            return Result::success(
-                data: null,
-                message: 'Activity deleted successfully.',
-            );
         } catch (\Throwable $exception) {
             $this->transactionManager->rollback();
 
@@ -264,6 +248,38 @@ final class ActivityService
                 message: 'Failed to delete the activity. Please try again.',
                 errorCode: 'ACTIVITY_DELETE_FAILED',
             );
+        }
+
+        // The activity is already committed: a failing listener must not turn
+        // a successful delete into an error response.
+        $this->dispatchRecordedEvents($activityEntity);
+
+        return Result::success(
+            data: null,
+            message: 'Activity deleted successfully.',
+        );
+    }
+
+    /**
+     * Dispatches the events the entity recorded. Runs after the transaction
+     * commits, and a listener failure is logged rather than surfaced, so it
+     * cannot override an already-persisted change.
+     *
+     * @param ActivityEntity $activityEntity
+     *
+     * @return void
+     */
+    private function dispatchRecordedEvents(ActivityEntity $activityEntity): void
+    {
+        foreach ($activityEntity->releaseEvents() as $event) {
+            try {
+                $this->eventDispatcher->dispatch($event);
+            } catch (\Throwable $exception) {
+                $this->logger->error('Activity event listener failed.', [
+                    'event' => $event::class,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
         }
     }
 }

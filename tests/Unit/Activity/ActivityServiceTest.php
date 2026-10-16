@@ -139,6 +139,23 @@ final class ActivityServiceTest extends TestCase
         $this->activityService->create($this->makeCreateDTO());
     }
 
+    public function test_create_still_reports_success_when_a_listener_throws(): void
+    {
+        $this->activityRepository->method('save')->willReturn($this->makeEntity());
+
+        $this->transactionManager->expects($this->once())->method('commit');
+        $this->transactionManager->expects($this->never())->method('rollback');
+
+        $this->eventDispatcher->method('dispatch')
+            ->willThrowException(new RuntimeException('Listener blew up.'));
+
+        $result = $this->activityService->create($this->makeCreateDTO());
+
+        // The row is committed: a failing listener must not turn this into an error.
+        $this->assertTrue($result->isSuccess());
+        $this->assertInstanceOf(ActivityResponseDTO::class, $result->data);
+    }
+
     public function test_create_returns_failure_when_repository_throws(): void
     {
         $this->activityRepository->method('save')
@@ -229,7 +246,7 @@ final class ActivityServiceTest extends TestCase
             subject: 'Updated subject',
             type: ActivityType::MEETING,
             description: 'Updated description',
-            dueDate: '2026-12-01 10:00:00',
+            dueDate: new \DateTimeImmutable('2026-12-01 10:00:00'),
         ));
 
         // The very entity read under the lock is the one handed back for persistence.
@@ -277,7 +294,7 @@ final class ActivityServiceTest extends TestCase
         $this->activityService->update(new ActivityUpdateDTO(
             id: 1,
             subject: 'Only subject',
-            completedAt: '2026-10-04 08:15:00',
+            completedAt: new \DateTimeImmutable('2026-10-04 08:15:00'),
         ));
 
         $this->assertFalse($captured->isPending());
@@ -314,7 +331,7 @@ final class ActivityServiceTest extends TestCase
 
         $result = $this->activityService->update(new ActivityUpdateDTO(
             id: 1,
-            completedAt: '2099-01-01 00:00:00',
+            completedAt: new \DateTimeImmutable('2099-01-01 00:00:00'),
         ));
 
         $this->assertTrue($result->isFailure());
@@ -365,21 +382,6 @@ final class ActivityServiceTest extends TestCase
         $this->assertTrue($result->isFailure());
         $this->assertSame('ACTIVITY_UPDATE_FAILED', $result->errorCode);
         $this->assertNull($result->data);
-    }
-
-    public function test_update_returns_failure_when_due_date_is_unparseable(): void
-    {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
-
-        $this->transactionManager->expects($this->once())->method('rollback');
-        $this->activityRepository->expects($this->never())->method('save');
-
-        $result = $this->activityService->update(
-            new ActivityUpdateDTO(id: 1, dueDate: 'not-a-date')
-        );
-
-        $this->assertTrue($result->isFailure());
-        $this->assertSame('ACTIVITY_UPDATE_FAILED', $result->errorCode);
     }
 
     public function test_update_returns_failure_when_an_empty_subject_breaks_the_invariant(): void
@@ -452,6 +454,23 @@ final class ActivityServiceTest extends TestCase
         $this->activityService->deleteActivity(1);
     }
 
+    public function test_delete_still_reports_success_when_a_listener_throws(): void
+    {
+        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
+
+        $this->transactionManager->expects($this->once())->method('commit');
+        $this->transactionManager->expects($this->never())->method('rollback');
+
+        $this->eventDispatcher->method('dispatch')
+            ->willThrowException(new RuntimeException('Listener blew up.'));
+
+        $result = $this->activityService->deleteActivity(1);
+
+        // The row is deleted: a failing listener must not turn this into an error.
+        $this->assertTrue($result->isSuccess());
+        $this->assertSame('Activity deleted successfully.', $result->message);
+    }
+
     public function test_delete_returns_failure_when_activity_is_missing(): void
     {
         $this->activityRepository->method('findByIdWithLock')->willReturn(null);
@@ -508,8 +527,8 @@ final class ActivityServiceTest extends TestCase
             subject: $subject,
             userId: 7,
             description: 'Intro call with the prospect',
-            dueDate: '2026-10-05 09:30:00',
-            completedAt: $completedAt,
+            dueDate: new \DateTimeImmutable('2026-10-05 09:30:00'),
+            completedAt: $completedAt !== null ? new \DateTimeImmutable($completedAt) : null,
         );
     }
 
