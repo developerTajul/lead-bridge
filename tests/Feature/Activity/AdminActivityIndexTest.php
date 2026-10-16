@@ -115,7 +115,7 @@ final class AdminActivityIndexTest extends TestCase
     {
         $entity = ActivityEntity::reconstitute(
             id: 2,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 43,
             type: ActivityType::MEETING,
             subject: 'Kickoff meeting',
@@ -200,7 +200,7 @@ final class AdminActivityIndexTest extends TestCase
             {
                 return ActivityEntity::reconstitute(
                     id: 1,
-                    trackableType: 'App\\Models\\Lead',
+                    trackableType: 'lead',
                     trackableId: 42,
                     type: ActivityType::CALL,
                     subject: 'Discovery call',
@@ -229,7 +229,7 @@ final class AdminActivityIndexTest extends TestCase
     {
         return ActivityEntity::reconstitute(
             id: 1,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',

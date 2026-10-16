@@ -80,7 +80,8 @@
                                     </span>
                                 </td>
                                 <td class="px-6 py-3 text-xs text-gray-500">
-                                    {{ class_basename($activity->trackable_type) }} #{{ $activity->trackable_id }}
+                                    {{-- A row may hold either the morph alias or a legacy class name. --}}
+                                    {{ class_basename(\Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($activity->trackable_type) ?? $activity->trackable_type) }} #{{ $activity->trackable_id }}
                                 </td>
                                 <td class="px-6 py-3 text-xs text-gray-500">
                                     {{ $activity->due_date ?? '—' }}

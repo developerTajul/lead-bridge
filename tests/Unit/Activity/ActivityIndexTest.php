@@ -85,7 +85,7 @@ final class ActivityIndexTest extends TestCase
         $this->assertSame(1, $firstItem->id);
         $this->assertSame('Discovery call', $firstItem->subject);
         $this->assertSame('call', $firstItem->type);
-        $this->assertSame('App\\Models\\Lead', $firstItem->trackable_type);
+        $this->assertSame('lead', $firstItem->trackable_type);
         $this->assertSame(42, $firstItem->trackable_id);
         $this->assertSame(7, $firstItem->user_id);
         $this->assertNull($firstItem->completed_at);
@@ -237,7 +237,7 @@ final class ActivityIndexTest extends TestCase
     {
         return ActivityEntity::reconstitute(
             id: 1,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',

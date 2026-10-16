@@ -141,7 +141,13 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
         }
 
         if ($filter->period === ActivityPeriod::TODAY) {
-            $query->whereDate('due_date', now()->toDateString());
+            // due_date is stored as a UTC wall clock, so "today" is the UTC day
+            // and the comparison stays a half-open range rather than whereDate,
+            // which would apply the connection's timezone to the column.
+            $dayStart = now()->startOfDay()->utc();
+
+            $query->where('due_date', '>=', $dayStart)
+                  ->where('due_date', '<', $dayStart->copy()->addDay());
         } elseif ($filter->period === ActivityPeriod::OVERDUE) {
             // SQL form of ActivityEntity::isOverdue(): pending and past due.
             $query->whereNull('completed_at')

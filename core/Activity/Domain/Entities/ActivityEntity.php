@@ -162,7 +162,8 @@ final class ActivityEntity
     }
 
     /**
-     * Rebuilds an activity from persisted state.
+     * Rebuilds an activity from persisted state. The stored morph alias is
+     * read as-is, so an alias that is no longer writable still loads.
      *
      * @param int                    $id
      * @param string                 $trackableType
@@ -190,7 +191,7 @@ final class ActivityEntity
     {
         return new self(
             id: $id,
-            trackableType: TrackableType::fromString($trackableType),
+            trackableType: TrackableType::fromPersisted($trackableType),
             trackableId: $trackableId,
             type: $type,
             subject: $subject,
@@ -254,8 +255,8 @@ final class ActivityEntity
     /**
      * Applies an update payload. A null field stays unchanged, a clear flag
      * drops it, completedAt completes the activity and reopen clears an
-     * existing completion. The whole payload is validated up front, so a
-     * rejected update leaves the activity untouched.
+     * existing completion. The whole payload is validated up front including
+     * the completion, so a rejected update leaves the activity untouched.
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
@@ -282,7 +283,7 @@ final class ActivityEntity
         bool $clearDescription = false,
         ?DateTimeImmutable $now = null
     ): void {
-        $this->assertUpdateIsApplicable($subject, $dueDate, $completedAt, $reopen, $clearDueDate);
+        $this->assertUpdateIsApplicable($subject, $dueDate, $completedAt, $reopen, $clearDueDate, $now);
 
         $this->updateDetails(
             subject: $subject,
@@ -297,7 +298,7 @@ final class ActivityEntity
             // A payload asking to reopen an activity that is already pending is
             // a no-op, not a contradiction: it carries no completion time, so
             // the end state is the one the caller asked for. reopen() itself
-            // stays strict for direct callers.
+            // stays strict for direct callers, so the guard is skipped here.
             if (! $this->isPending()) {
                 $this->reopen();
             }
@@ -306,31 +307,33 @@ final class ActivityEntity
         }
 
         if ($completedAt !== null) {
-            $this->markCompleted($completedAt, $now);
+            $this->completedAt = $completedAt;
         }
     }
 
     /**
-     * Checks an update payload before any of it is applied. The completion
-     * time is only checked for its own contradiction here; markCompleted()
-     * is what asserts it is actually completable.
+     * Checks an update payload before any of it is applied. The completion is
+     * checked here rather than when it is applied, so that a payload rejected
+     * for its timing cannot leave the earlier fields already mutated.
      *
      * @param string|null            $subject
      * @param DateTimeImmutable|null $dueDate
      * @param DateTimeImmutable|null $completedAt
      * @param bool                   $reopen
      * @param bool                   $clearDueDate
+     * @param DateTimeImmutable|null $now Clock to compare against; defaults to the current time.
      *
      * @return void
      *
-     * @throws InvalidActivityException When the payload is contradictory.
+     * @throws InvalidActivityException When the payload is contradictory or the completion is not applicable.
      */
     private function assertUpdateIsApplicable(
         ?string $subject,
         ?DateTimeImmutable $dueDate,
         ?DateTimeImmutable $completedAt,
         bool $reopen,
-        bool $clearDueDate
+        bool $clearDueDate,
+        ?DateTimeImmutable $now = null
     ): void {
         if ($subject !== null && trim($subject) === '') {
             throw InvalidActivityException::emptySubject();
@@ -345,10 +348,22 @@ final class ActivityEntity
         if ($clearDueDate && $dueDate !== null) {
             throw InvalidActivityException::conflictingDueDateAndClear();
         }
+
+        // The completion is only applied when the payload does not reopen, so
+        // its guard is scoped to the same condition.
+        if ($completedAt !== null && ! $reopen) {
+            if (! $this->isPending()) {
+                throw InvalidActivityException::alreadyCompleted();
+            }
+
+            self::assertCompletable($completedAt, $now);
+        }
     }
 
     /**
-     * Marks the activity as completed at the given moment.
+     * Marks the activity as completed at the given moment. The guards stay
+     * here for direct callers; applyChanges() checks them before mutating, so
+     * a payload it accepts does not trip them.
      *
      * @param DateTimeImmutable      $completedAt
      * @param DateTimeImmutable|null $now Clock to compare against; defaults to the current time.

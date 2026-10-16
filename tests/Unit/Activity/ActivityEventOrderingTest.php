@@ -34,7 +34,7 @@ final class ActivityEventOrderingTest extends TestCase
         $service = $this->makeService();
 
         $result = $service->create(new ActivityCreateDTO(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -53,7 +53,7 @@ final class ActivityEventOrderingTest extends TestCase
         $service = $this->makeService(listenerThrows: true);
 
         $result = $service->create(new ActivityCreateDTO(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -101,7 +101,7 @@ final class ActivityEventOrderingTest extends TestCase
             {
                 return ActivityEntity::reconstitute(
                     id: 5,
-                    trackableType: 'App\\Models\\Lead',
+                    trackableType: 'lead',
                     trackableId: 42,
                     type: ActivityType::CALL,
                     subject: 'Discovery call',

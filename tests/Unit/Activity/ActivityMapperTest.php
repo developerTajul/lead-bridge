@@ -215,7 +215,7 @@ final class ActivityMapperTest extends TestCase
     private function createPayload(array $overrides = []): array
     {
         return array_merge([
-            'trackable_type' => 'App\\Models\\Lead',
+            'trackable_type' => 'lead',
             'trackable_id' => 42,
             'type' => 'call',
             'subject' => 'Discovery call',

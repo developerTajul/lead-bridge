@@ -65,11 +65,11 @@ final class ActivityService
             // one carrying an ID. The created entity records nothing.
             $savedEntity->recordCreated();
 
-            $this->transactionManager->commit();
+            // Released before the commit so an event already raised on this
+            // entity is owned by this method, not stranded on it.
+            $recordedEvents = $savedEntity->releaseEvents();
 
-            // Read back on the read side: save() returns a write-side entity,
-            // so the DB-generated columns and relations only come from here.
-            $activityResponseDTO = $this->projectSavedActivity((int) $savedEntity->getId());
+            $this->transactionManager->commit();
         } catch (InvalidActivityException $exception) {
             $this->transactionManager->rollback();
 
@@ -91,18 +91,14 @@ final class ActivityService
             );
         }
 
-        // The row is committed by this point, so a read-back that came up empty
-        // is a response-assembly failure, not a rolled-back create.
-        if (! $activityResponseDTO) {
-            return $this->savedActivityUnreadable('create');
-        }
+        // Past this point the write has committed: dispatching and the read-back
+        // can no longer roll it back, so neither may turn it into a failure.
+        $this->dispatchEvents($recordedEvents);
 
-        // The activity is already committed: a failing listener must not turn
-        // a successful create into an error response.
-        $this->dispatchEvents($savedEntity->releaseEvents());
-
+        // Read back on the read side: save() returns a write-side entity, so the
+        // DB-generated columns and relations only come from here.
         return Result::success(
-            data: $activityResponseDTO,
+            data: $this->readBackOrFallback($savedEntity),
             message: 'Activity created successfully.',
         );
     }
@@ -202,7 +198,7 @@ final class ActivityService
                 clearDescription: $activityUpdateDTO->clearDescription,
             );
 
-            $this->activityRepository->save($activityEntity);
+            $savedEntity = $this->activityRepository->save($activityEntity);
 
             // save() hydrates a fresh entity, so anything the mutated instance
             // recorded has to be released before that return value replaces it.
@@ -210,9 +206,6 @@ final class ActivityService
             $recordedEvents = $activityEntity->releaseEvents();
 
             $this->transactionManager->commit();
-
-            // Read back on the read side, for the same reason as create().
-            $activityResponseDTO = $this->projectSavedActivity($activityUpdateDTO->id);
         } catch (InvalidActivityException $exception) {
             $this->transactionManager->rollback();
 
@@ -235,18 +228,13 @@ final class ActivityService
             );
         }
 
-        // The row is committed by this point, so a read-back that came up empty
-        // is a response-assembly failure, not a rolled-back update.
-        if (! $activityResponseDTO) {
-            return $this->savedActivityUnreadable('update');
-        }
-
-        // The change is already committed: a failing listener must not turn a
-        // successful update into an error response.
+        // Past this point the write has committed: dispatching and the read-back
+        // can no longer roll it back, so neither may turn it into a failure.
         $this->dispatchEvents($recordedEvents);
 
+        // Read back on the read side, for the same reason as create().
         return Result::success(
-            data: $activityResponseDTO,
+            data: $this->readBackOrFallback($savedEntity),
             message: 'Activity updated successfully.',
         );
     }
@@ -312,40 +300,61 @@ final class ActivityService
     }
 
     /**
-     * Re-reads a just-saved activity through the query port and maps it to the
-     * response DTO. The write side returns a domain entity only, so the
-     * DB-generated columns and the loaded relations have to come from a read.
+     * Builds the response from a read of the committed row, falling back to the
+     * saved entity when that read cannot serve one. The write is already
+     * committed by this point, so a failed read must not be reported to the
+     * caller as a failed write; the fallback response carries every field the
+     * write itself produced, but no DB timestamp and no loaded relations.
      *
-     * @param int $id
+     * @param ActivityEntity $savedEntity
      *
-     * @return ActivityResponseDTO|null Null when the row cannot be read back.
+     * @return ActivityResponseDTO
      */
-    private function projectSavedActivity(int $id): ?ActivityResponseDTO
+    private function readBackOrFallback(ActivityEntity $savedEntity): ActivityResponseDTO
     {
-        $activityProjection = $this->activityQuery->findById($id);
+        try {
+            $activityProjection = $this->activityQuery->findById((int) $savedEntity->getId());
 
-        if (! $activityProjection) {
-            return null;
+            if ($activityProjection) {
+                return $this->activityResponseMapper->toResponseDTO($activityProjection);
+            }
+
+            $this->logger->error('Committed activity could not be read back, so the response was built from the saved entity.', [
+                'id' => $savedEntity->getId(),
+            ]);
+        } catch (\Throwable $exception) {
+            $this->logger->error('Reading back a committed activity failed, so the response was built from the saved entity.', [
+                'id' => $savedEntity->getId(),
+                'message' => $exception->getMessage(),
+            ]);
         }
 
-        return $this->activityResponseMapper->toResponseDTO($activityProjection);
+        return $this->toFallbackResponse($savedEntity);
     }
 
     /**
-     * Reports a write that committed but could not be read back afterwards.
-     * Only reachable if the row vanished between the commit and the read.
+     * Builds the response straight from the saved entity, for when the read-back
+     * could not serve one. Fields the entity does not carry stay null rather
+     * than being invented here.
      *
-     * @param string $operation
+     * @param ActivityEntity $savedEntity
      *
-     * @return Result
+     * @return ActivityResponseDTO
      */
-    private function savedActivityUnreadable(string $operation): Result
+    private function toFallbackResponse(ActivityEntity $savedEntity): ActivityResponseDTO
     {
-        $this->logger->error('Saved activity could not be read back.', ['operation' => $operation]);
-
-        return Result::failure(
-            message: "The activity was {$operation}d but could not be read back.",
-            errorCode: 'ACTIVITY_READ_BACK_FAILED',
+        return new ActivityResponseDTO(
+            id: $savedEntity->getId(),
+            user_id: $savedEntity->getUserId(),
+            trackable_type: $savedEntity->getTrackableType()->toString(),
+            trackable_id: $savedEntity->getTrackableId(),
+            type: $savedEntity->getType()->value,
+            subject: $savedEntity->getSubject(),
+            description: $savedEntity->getDescription(),
+            // Formatted the way ActivityResponseMapper does, so both paths
+            // produce the same wire format.
+            due_date: $savedEntity->getDueDate()?->format('Y-m-d H:i:s'),
+            completed_at: $savedEntity->getCompletedAt()?->format('Y-m-d H:i:s'),
         );
     }
 

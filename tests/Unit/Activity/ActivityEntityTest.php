@@ -19,7 +19,7 @@ final class ActivityEntityTest extends TestCase
     public function test_create_new_starts_without_an_id_or_completion(): void
     {
         $entity = ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -34,7 +34,7 @@ final class ActivityEntityTest extends TestCase
     public function test_create_new_sets_the_completion_time_when_one_is_supplied(): void
     {
         $entity = ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -52,7 +52,7 @@ final class ActivityEntityTest extends TestCase
         $this->expectExceptionMessage('An activity cannot be completed in the future');
 
         ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -64,7 +64,7 @@ final class ActivityEntityTest extends TestCase
     public function test_create_new_accepts_a_completion_time_in_the_past(): void
     {
         $entity = ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -82,7 +82,7 @@ final class ActivityEntityTest extends TestCase
         $this->expectExceptionMessage('An activity must carry a subject.');
 
         ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: '',
@@ -96,7 +96,7 @@ final class ActivityEntityTest extends TestCase
         $this->expectExceptionMessage('Trackable ID must be a positive integer');
 
         ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: $trackableId,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -194,7 +194,7 @@ final class ActivityEntityTest extends TestCase
 
         $entity->applyChanges(subject: 'New subject', type: ActivityType::EMAIL);
 
-        $this->assertSame('App\\Models\\Lead', $entity->getTrackableType()->toString());
+        $this->assertSame('lead', $entity->getTrackableType()->toString());
         $this->assertSame(42, $entity->getTrackableId());
         $this->assertSame(7, $entity->getUserId());
     }
@@ -383,7 +383,7 @@ final class ActivityEntityTest extends TestCase
         $entity = $this->makeEntity();
 
         $this->assertInstanceOf(TrackableType::class, $entity->getTrackableType());
-        $this->assertSame('App\\Models\\Lead', $entity->getTrackableType()->toString());
+        $this->assertSame('lead', $entity->getTrackableType()->toString());
     }
 
     // ---------------------------------------------------------------------
@@ -503,6 +503,68 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame(ActivityType::CALL, $entity->getType());
     }
 
+    /**
+     * A completion time in the future is rejected on its timing, so it has to
+     * be checked before the subject it travelled with is applied. Otherwise the
+     * caller is told the whole update failed while the subject is already set.
+     */
+    public function test_apply_changes_leaves_the_activity_untouched_when_the_completion_lies_ahead(): void
+    {
+        $entity = $this->makeEntity();
+
+        try {
+            $entity->applyChanges(
+                subject: 'Should not be applied',
+                type: ActivityType::MEETING,
+                description: 'Should not be applied',
+                completedAt: new \DateTimeImmutable('2026-12-02 11:00:00'),
+                now: new \DateTimeImmutable('2026-12-01 09:00:00'),
+            );
+        } catch (InvalidActivityException) {
+            // Rejected as a whole; nothing below may have been mutated.
+        }
+
+        $this->assertSame('Discovery call', $entity->getSubject());
+        $this->assertSame(ActivityType::CALL, $entity->getType());
+        $this->assertSame('Intro call with the prospect', $entity->getDescription());
+        $this->assertTrue($entity->isPending());
+        $this->assertNull($entity->getCompletedAt());
+    }
+
+    public function test_apply_changes_leaves_a_completed_activity_untouched_when_the_completion_is_refused(): void
+    {
+        $entity = $this->makeCompletedEntity();
+
+        try {
+            $entity->applyChanges(
+                subject: 'Should not be applied',
+                dueDate: new \DateTimeImmutable('2026-11-01 09:00:00'),
+                completedAt: new \DateTimeImmutable('2026-10-03 11:00:00'),
+            );
+        } catch (InvalidActivityException) {
+            // Already completed, so the payload is rejected whole.
+        }
+
+        $this->assertSame('Discovery call', $entity->getSubject());
+        $this->assertSame('2026-10-05 09:30:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-10-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+    }
+
+    public function test_apply_changes_completes_an_activity_that_passes_the_timing_guard(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->applyChanges(
+            subject: 'Applied',
+            completedAt: new \DateTimeImmutable('2026-10-02 11:00:00'),
+            now: new \DateTimeImmutable('2026-10-03 09:00:00'),
+        );
+
+        $this->assertSame('Applied', $entity->getSubject());
+        $this->assertFalse($entity->isPending());
+        $this->assertSame('2026-10-02 11:00:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+    }
+
     public function test_apply_changes_keeps_the_completion_when_nothing_is_supplied(): void
     {
         $entity = $this->makeEntity();
@@ -553,7 +615,7 @@ final class ActivityEntityTest extends TestCase
     {
         $entity = ActivityEntity::reconstitute(
             id: 1,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -567,7 +629,7 @@ final class ActivityEntityTest extends TestCase
     {
         return ActivityEntity::reconstitute(
             id: 1,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -586,7 +648,7 @@ final class ActivityEntityTest extends TestCase
     {
         return ActivityEntity::reconstitute(
             id: 1,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',

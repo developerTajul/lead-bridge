@@ -100,7 +100,7 @@ final class ActivityServiceTest extends TestCase
 
         $this->assertNotNull($captured);
         $this->assertNull($captured->getId());
-        $this->assertSame('App\\Models\\Lead', $captured->getTrackableType()->toString());
+        $this->assertSame('lead', $captured->getTrackableType()->toString());
         $this->assertSame(42, $captured->getTrackableId());
         $this->assertSame(ActivityType::CALL, $captured->getType());
         $this->assertSame('Discovery call', $captured->getSubject());
@@ -662,7 +662,7 @@ final class ActivityServiceTest extends TestCase
         ?string $completedAt = null,
     ): ActivityCreateDTO {
         return new ActivityCreateDTO(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: $subject,
@@ -677,7 +677,7 @@ final class ActivityServiceTest extends TestCase
     {
         return ActivityEntity::reconstitute(
             id: 1,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',

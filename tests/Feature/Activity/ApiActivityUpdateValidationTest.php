@@ -138,7 +138,7 @@ final class ApiActivityUpdateValidationTest extends TestCase
     {
         return ActivityEntity::reconstitute(
             id: $id,
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',

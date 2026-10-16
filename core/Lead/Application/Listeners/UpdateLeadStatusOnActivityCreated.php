@@ -10,6 +10,11 @@ use Core\Shared\Application\Contracts\QueueManagerContract;
 
 final class UpdateLeadStatusOnActivityCreated
 {
+    /**
+     * The morph alias an activity carries when it is attached to a lead.
+     */
+    private const LEAD_MORPH_ALIAS = 'lead';
+
     public function __construct(
         private readonly QueueManagerContract $queueManager
     ) {}
@@ -19,7 +24,7 @@ final class UpdateLeadStatusOnActivityCreated
      */
     public function handle(ActivityCreatedEvent $event): void
     {
-        if ($event->trackableType === 'App\Models\Lead' || $event->trackableType === 'Lead') {
+        if ($event->trackableType === self::LEAD_MORPH_ALIAS) {
             $queueData = new UpdateLeadStatusQueueDTO(
                 leadId: $event->trackableId,
                 status: 'contacted'

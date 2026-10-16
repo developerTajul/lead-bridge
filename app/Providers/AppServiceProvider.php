@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Models\Company;
+use App\Models\Contact;
+use App\Models\Deal;
+use App\Models\Lead;
 use Core\Activity\Domain\Events\ActivityCreatedEvent;
 use Core\Auth\Application\Contracts\AuthMapperContract;
 use Core\Auth\Application\Mappers\AuthRequestMapper;
@@ -21,11 +25,26 @@ use Core\Shared\Infrastructure\Events\LaravelEventDispatcher;
 use Core\Shared\Infrastructure\Repositories\EloquentSlugChecker;
 use Core\Shared\Infrastructure\Security\LaravelPasswordHasher;
 use Core\Shared\Infrastructure\Storage\LaravelFileUploader;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
+    /**
+     * Morph aliases stored in a polymorphic column, mapped to their models.
+     * The Activity module writes these aliases; Eloquent resolves them back
+     * to a class when a trackable relation is loaded.
+     *
+     * @var array<string, class-string>
+     */
+    private const MORPH_MAP = [
+        'lead' => Lead::class,
+        'deal' => Deal::class,
+        'contact' => Contact::class,
+        'company' => Company::class,
+    ];
+
     /**
      * Register any application services.
      */
@@ -55,6 +74,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Relation::morphMap(self::MORPH_MAP);
+
         Event::listen(
             ActivityCreatedEvent::class,
             UpdateLeadStatusOnActivityCreated::class

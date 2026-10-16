@@ -212,7 +212,7 @@ final class ActivityEventLossTest extends TestCase
             {
                 return ActivityEntity::reconstitute(
                     id: $id,
-                    trackableType: 'App\\Models\\Lead',
+                    trackableType: 'lead',
                     trackableId: 42,
                     type: ActivityType::CALL,
                     subject: 'Discovery call',
@@ -279,7 +279,7 @@ final class ActivityEventLossTest extends TestCase
     private function makeUnsavedEntity(): ActivityEntity
     {
         return ActivityEntity::createNew(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
@@ -289,7 +289,7 @@ final class ActivityEventLossTest extends TestCase
     private function makeCreateDTO(): ActivityCreateDTO
     {
         return new ActivityCreateDTO(
-            trackableType: 'App\\Models\\Lead',
+            trackableType: 'lead',
             trackableId: 42,
             type: ActivityType::CALL,
             subject: 'Discovery call',
