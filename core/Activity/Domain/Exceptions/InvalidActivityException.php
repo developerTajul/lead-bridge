@@ -70,19 +70,6 @@ final class InvalidActivityException extends RuntimeException
     }
 
     /**
-     * Reports a list filter value that is not recognised.
-     *
-     * @param string $field
-     * @param string $value
-     *
-     * @return self
-     */
-    public static function invalidFilterValue(string $field, string $value): self
-    {
-        return new self(sprintf('Unsupported value [%s] for filter [%s].', $value, $field));
-    }
-
-    /**
      * Reports a page size outside the supported range.
      *
      * @param int $perPage
