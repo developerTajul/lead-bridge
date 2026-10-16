@@ -18,6 +18,7 @@ use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 
 /**
  * Covers what the write paths release and dispatch. save() hands back a freshly
@@ -28,6 +29,10 @@ final class ActivityEventLossTest extends TestCase
 {
     /** @var array<int, object> */
     private array $dispatched = [];
+
+    private bool $rolledBack = false;
+
+    private ?ActivityEntity $entityAtCommit = null;
 
     public function test_update_dispatches_whatever_the_mutated_entity_recorded(): void
     {
@@ -81,6 +86,47 @@ final class ActivityEventLossTest extends TestCase
         $this->assertInstanceOf(ActivityDeletedEvent::class, $this->dispatched[0]);
     }
 
+    public function test_a_failed_commit_does_not_dispatch_the_deleted_event(): void
+    {
+        $service = $this->makeService(commitThrows: true);
+
+        $result = $service->deleteActivity(1);
+
+        // The delete never landed, so listeners must not hear about it.
+        $this->assertTrue($result->isFailure());
+        $this->assertSame('ACTIVITY_DELETE_FAILED', $result->errorCode);
+        $this->assertSame([], $this->dispatched);
+    }
+
+    /**
+     * The delete event is drained before the commit, so a commit that never
+     * resolves cannot strand it. Releasing after commit() would still dispatch
+     * nothing here, but it would leave the event on an entity that the caller
+     * has already been told failed.
+     */
+    public function test_the_deleted_event_is_drained_before_the_commit(): void
+    {
+        $service = $this->makeService(commitThrows: true);
+
+        $service->deleteActivity(1);
+
+        $this->assertNotNull($this->entityAtCommit, 'The lock read never ran.');
+        $this->assertSame(
+            [],
+            $this->entityAtCommit->releaseEvents(),
+            'The entity must be drained before commit() is called.',
+        );
+    }
+
+    public function test_a_failed_commit_rolls_the_transaction_back(): void
+    {
+        $service = $this->makeService(commitThrows: true, trackingRollback: true);
+
+        $service->deleteActivity(1);
+
+        $this->assertTrue($this->rolledBack);
+    }
+
     public function test_recording_a_created_event_on_an_unsaved_entity_is_refused(): void
     {
         $this->expectException(\LogicException::class);
@@ -99,15 +145,25 @@ final class ActivityEventLossTest extends TestCase
     }
 
     /**
-     * @param bool $recordOnSave Record on the entity handed to save().
-     * @param bool $recordOnLock Record on the entity returned by the lock read.
+     * @param bool $recordOnSave      Record on the entity handed to save().
+     * @param bool $recordOnLock      Record on the entity returned by the lock read.
+     * @param bool $commitThrows      Make commit() fail, as a deadlock would.
+     * @param bool $trackingRollback  Record whether rollback() was reached.
      */
-    private function makeService(bool $recordOnSave = false, bool $recordOnLock = false): ActivityService
-    {
-        $repository = new class($recordOnSave, $recordOnLock) implements ActivityRepositoryContract, ActivityQueryContract {
+    private function makeService(
+        bool $recordOnSave = false,
+        bool $recordOnLock = false,
+        bool $commitThrows = false,
+        bool $trackingRollback = false,
+    ): ActivityService {
+        $entityAtCommit = &$this->entityAtCommit;
+
+        $repository = new class($recordOnSave, $recordOnLock, $entityAtCommit) implements ActivityRepositoryContract, ActivityQueryContract {
+            /** @param ?ActivityEntity $entityAtCommit */
             public function __construct(
                 private readonly bool $recordOnSave,
                 private readonly bool $recordOnLock,
+                private ?ActivityEntity &$entityAtCommit,
             ) {}
 
             public function save(ActivityEntity $activity): ActivityEntity
@@ -127,6 +183,10 @@ final class ActivityEventLossTest extends TestCase
                 if ($this->recordOnLock) {
                     $entity->recordDeleted();
                 }
+
+                // The service mutates this exact instance, so holding onto it
+                // is how the test observes the event buffer during the commit.
+                $this->entityAtCommit = $entity;
 
                 return $entity;
             }
@@ -162,12 +222,32 @@ final class ActivityEventLossTest extends TestCase
             }
         };
 
-        $transactionManager = new class implements TransactionManagerContract {
+        $rolledBack = &$this->rolledBack;
+
+        $transactionManager = new class($commitThrows, $trackingRollback, $rolledBack) implements TransactionManagerContract {
+            public function __construct(
+                private readonly bool $commitThrows,
+                private readonly bool $trackingRollback,
+                private bool &$rolledBack,
+            ) {}
+
             public function beginTransaction(): void {}
 
-            public function commit(): void {}
+            public function commit(): void
+            {
+                // The service drains the entity before it gets here, so this is
+                // the last moment the event buffer can still be observed.
+                if ($this->commitThrows) {
+                    throw new RuntimeException('Commit failed.');
+                }
+            }
 
-            public function rollback(): void {}
+            public function rollback(): void
+            {
+                if ($this->trackingRollback) {
+                    $this->rolledBack = true;
+                }
+            }
 
             public function run(callable $callback): mixed
             {
