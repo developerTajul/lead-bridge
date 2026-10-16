@@ -156,6 +156,58 @@ final class ActivityMapperTest extends TestCase
     }
 
     /**
+     * A null field normally means "leave unchanged", so an explicit clear has
+     * to be carried as its own intent.
+     */
+    #[DataProvider('blankWireValues')]
+    public function test_update_dto_reads_a_supplied_blank_value_as_a_clear(mixed $wireValue): void
+    {
+        $dto = $this->mapper->mapToUpdateDTO(1, [
+            'due_date' => $wireValue,
+            'description' => $wireValue,
+        ]);
+
+        $this->assertTrue($dto->clearDueDate);
+        $this->assertTrue($dto->clearDescription);
+        $this->assertNull($dto->dueDate);
+        $this->assertNull($dto->description);
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function blankWireValues(): array
+    {
+        return [
+            'null' => [null],
+            'empty string' => [''],
+        ];
+    }
+
+    public function test_update_dto_reads_an_absent_key_as_leave_unchanged(): void
+    {
+        $dto = $this->mapper->mapToUpdateDTO(1, ['subject' => 'Only subject']);
+
+        $this->assertFalse($dto->clearDueDate);
+        $this->assertFalse($dto->clearDescription);
+        $this->assertNull($dto->dueDate);
+        $this->assertNull($dto->description);
+    }
+
+    public function test_update_dto_does_not_clear_a_field_that_carries_a_value(): void
+    {
+        $dto = $this->mapper->mapToUpdateDTO(1, [
+            'due_date' => '2026-12-01 10:00:00',
+            'description' => 'Still here',
+        ]);
+
+        $this->assertFalse($dto->clearDueDate);
+        $this->assertFalse($dto->clearDescription);
+        $this->assertSame('2026-12-01 10:00:00', $dto->dueDate?->format('Y-m-d H:i:s'));
+        $this->assertSame('Still here', $dto->description);
+    }
+
+    /**
      * @param array<string, mixed> $overrides
      *
      * @return array<string, mixed>

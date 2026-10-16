@@ -245,13 +245,126 @@ final class ActivityEntityTest extends TestCase
 
     public function test_reopen_clears_the_completion_time(): void
     {
-        $entity = $this->makeEntity();
-        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+        $entity = $this->makeCompletedEntity();
 
         $entity->reopen();
 
         $this->assertTrue($entity->isPending());
         $this->assertNull($entity->getCompletedAt());
+    }
+
+    /**
+     * Called directly, a reopen of a pending activity hides a caller mistake,
+     * so it is refused. applyChanges() deliberately does not share this
+     * strictness, because a payload may carry the flag unconditionally.
+     */
+    public function test_reopen_rejects_an_activity_that_is_already_pending(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('The activity is not completed, so it cannot be reopened.');
+
+        $entity->reopen();
+    }
+
+    public function test_reopen_leaves_the_pending_activity_untouched_when_refused(): void
+    {
+        $entity = $this->makeEntity();
+
+        try {
+            $entity->reopen();
+        } catch (InvalidActivityException) {
+            // Refused; the activity must still be pending and unmodified.
+        }
+
+        $this->assertTrue($entity->isPending());
+        $this->assertNull($entity->getCompletedAt());
+    }
+
+    public function test_clear_due_date_drops_the_due_date(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->clearDueDate();
+
+        $this->assertNull($entity->getDueDate());
+    }
+
+    public function test_clear_description_drops_the_description(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->clearDescription();
+
+        $this->assertNull($entity->getDescription());
+    }
+
+    /**
+     * A null due date means "leave unchanged", so clearing needs its own flag.
+     */
+    public function test_apply_changes_clears_the_due_date_when_asked(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->applyChanges(subject: 'New subject', clearDueDate: true);
+
+        $this->assertNull($entity->getDueDate());
+        $this->assertSame('New subject', $entity->getSubject());
+        // The description is untouched by a due-date clear.
+        $this->assertSame('Intro call with the prospect', $entity->getDescription());
+    }
+
+    public function test_apply_changes_clears_the_description_when_asked(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->applyChanges(clearDescription: true);
+
+        $this->assertNull($entity->getDescription());
+        // The due date is untouched by a description clear.
+        $this->assertSame('2026-10-05 09:30:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
+    }
+
+    public function test_apply_changes_clears_both_nullable_fields_at_once(): void
+    {
+        $entity = $this->makeEntity();
+
+        $entity->applyChanges(clearDueDate: true, clearDescription: true);
+
+        $this->assertNull($entity->getDueDate());
+        $this->assertNull($entity->getDescription());
+    }
+
+    public function test_apply_changes_rejects_replacing_and_clearing_the_due_date_together(): void
+    {
+        $entity = $this->makeEntity();
+
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('replaced and cleared by the same update');
+
+        $entity->applyChanges(
+            dueDate: new \DateTimeImmutable('2026-12-01 10:00:00'),
+            clearDueDate: true,
+        );
+    }
+
+    public function test_apply_changes_leaves_the_activity_untouched_when_a_clear_conflicts(): void
+    {
+        $entity = $this->makeEntity();
+
+        try {
+            $entity->applyChanges(
+                subject: 'Should not be applied',
+                dueDate: new \DateTimeImmutable('2026-12-01 10:00:00'),
+                clearDueDate: true,
+            );
+        } catch (InvalidActivityException) {
+            // Rejected as a whole; nothing below may have been mutated.
+        }
+
+        $this->assertSame('Discovery call', $entity->getSubject());
+        $this->assertSame('2026-10-05 09:30:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
     }
 
     public function test_is_pending_reflects_the_completion_marker(): void
@@ -305,10 +418,29 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('New subject', $entity->getSubject());
     }
 
+    /**
+     * A completed activity is only reachable through a persisted row: the
+     * update path reads one back under the lock, so that is the state a
+     * reopen payload actually sees.
+     */
     public function test_apply_changes_reopens_a_completed_activity(): void
     {
+        $entity = $this->makeCompletedEntity();
+
+        $entity->applyChanges(subject: 'New subject', reopen: true);
+
+        $this->assertTrue($entity->isPending());
+        $this->assertNull($entity->getCompletedAt());
+        $this->assertSame('New subject', $entity->getSubject());
+    }
+
+    /**
+     * Client screens send the reopen flag with whatever else changed, so it
+     * has to survive an already-pending activity instead of failing the update.
+     */
+    public function test_apply_changes_treats_reopening_a_pending_activity_as_a_no_op(): void
+    {
         $entity = $this->makeEntity();
-        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
 
         $entity->applyChanges(subject: 'New subject', reopen: true);
 
@@ -351,8 +483,7 @@ final class ActivityEntityTest extends TestCase
 
     public function test_apply_changes_leaves_the_activity_untouched_when_the_subject_is_invalid(): void
     {
-        $entity = $this->makeEntity();
-        $entity->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+        $entity = $this->makeCompletedEntity();
 
         try {
             // The completion would be legal on its own; the blank subject is
@@ -444,6 +575,25 @@ final class ActivityEntityTest extends TestCase
             description: 'Intro call with the prospect',
             dueDate: new \DateTimeImmutable('2026-10-05 09:30:00'),
             completedAt: null,
+        );
+    }
+
+    /**
+     * Builds an already-completed activity, which is what a reopen payload
+     * finds on a persisted row.
+     */
+    private function makeCompletedEntity(): ActivityEntity
+    {
+        return ActivityEntity::reconstitute(
+            id: 1,
+            trackableType: 'App\\Models\\Lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+            userId: 7,
+            description: 'Intro call with the prospect',
+            dueDate: new \DateTimeImmutable('2026-10-05 09:30:00'),
+            completedAt: new \DateTimeImmutable('2026-10-02 11:00:00'),
         );
     }
 }

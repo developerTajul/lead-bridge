@@ -13,7 +13,7 @@ use Core\Activity\Domain\Exceptions\InvalidActivityException;
  * Filter criteria the repository uses to narrow down the activity list.
  * Validates itself, so the criteria reaching Infrastructure are always usable.
  */
-readonly class ActivityFilter
+final readonly class ActivityFilter
 {
     public const MAX_PER_PAGE = 100;
 

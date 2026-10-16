@@ -109,6 +109,26 @@ final class InvalidActivityException extends RuntimeException
     }
 
     /**
+     * Reports a reopen of an activity that is not completed.
+     *
+     * @return self
+     */
+    public static function notCompleted(): self
+    {
+        return new self('The activity is not completed, so it cannot be reopened.');
+    }
+
+    /**
+     * Reports a payload that both replaces and clears the due date.
+     *
+     * @return self
+     */
+    public static function conflictingDueDateAndClear(): self
+    {
+        return new self('An activity cannot have its due date replaced and cleared by the same update.');
+    }
+
+    /**
      * Reports a completion timestamp that lies in the future.
      *
      * @param \DateTimeImmutable $completedAt

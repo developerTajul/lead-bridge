@@ -11,7 +11,7 @@ use DateTimeImmutable;
  * Carries validated activity creation input into the Service. Immutable.
  * Built exclusively by ActivityMapper - no factory methods here.
  */
-readonly class ActivityCreateDTO
+final readonly class ActivityCreateDTO
 {
     public function __construct(
         public string $trackableType,

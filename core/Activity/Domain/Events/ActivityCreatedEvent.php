@@ -7,7 +7,7 @@ namespace Core\Activity\Domain\Events;
 /**
  * Event fired when a new activity is successfully created.
  */
-readonly class ActivityCreatedEvent
+final readonly class ActivityCreatedEvent
 {
     public function __construct(
         public int $activityId,

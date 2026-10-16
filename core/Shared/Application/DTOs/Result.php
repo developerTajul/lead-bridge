@@ -9,7 +9,7 @@ namespace Core\Shared\Application\DTOs;
  * errorCode holds DOMAIN-SPECIFIC ERROR KEYS (e.g. CATEGORY_SLUG_CONFLICT),
  * never raw HTTP statuses — Delivery translates keys to status codes.
  */
-readonly class Result
+final readonly class Result
 {
     private function __construct(
         public bool $success,

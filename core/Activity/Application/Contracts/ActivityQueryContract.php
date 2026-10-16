@@ -9,9 +9,8 @@ use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 
 /**
- * Read side of the activity persistence port. Lives in the Application layer
- * because it returns ActivityProjectionDTO, keeping the Domain contract free
- * of Application types.
+ * Read side of the activity persistence port. Returns Application read models,
+ * so it lives in the Application layer.
  */
 interface ActivityQueryContract
 {

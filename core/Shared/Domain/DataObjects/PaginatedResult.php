@@ -9,7 +9,7 @@ namespace Core\Shared\Domain\DataObjects;
  * Created by Infrastructure repositories, consumed by Application services
  * and returned to Delivery inside a Result envelope.
  */
-readonly class PaginatedResult
+final readonly class PaginatedResult
 {
     public function __construct(
         public array $items,

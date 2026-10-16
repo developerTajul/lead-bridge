@@ -58,17 +58,38 @@ final class ActivityMapper implements ActivityMapperContract
      */
     public function mapToUpdateDTO(int $id, array $validatedData): ActivityUpdateDTO
     {
+        // A key that is absent means "leave unchanged"; a key that is present
+        // but null is an explicit request to clear that field.
+        $clearsDueDate = array_key_exists('due_date', $validatedData)
+            && $this->isBlank($validatedData['due_date']);
+        $clearsDescription = array_key_exists('description', $validatedData)
+            && $this->isBlank($validatedData['description']);
+
         return new ActivityUpdateDTO(
             id: $id,
             subject: $validatedData['subject'] ?? null,
             type: array_key_exists('type', $validatedData) && is_string($validatedData['type'])
                 ? $this->toType($validatedData['type'])
                 : null,
-            description: $validatedData['description'] ?? null,
+            description: $clearsDescription ? null : ($validatedData['description'] ?? null),
             dueDate: $this->toDateTime($validatedData['due_date'] ?? null, 'due_date'),
             completedAt: $this->toDateTime($validatedData['completed_at'] ?? null, 'completed_at'),
             reopen: $this->toBoolean($validatedData['reopen'] ?? false),
+            clearDueDate: $clearsDueDate,
+            clearDescription: $clearsDescription,
         );
+    }
+
+    /**
+     * Whether a supplied value is an explicit request to clear the field.
+     *
+     * @param mixed $value
+     *
+     * @return bool
+     */
+    private function isBlank(mixed $value): bool
+    {
+        return $value === null || $value === '';
     }
 
     /**

@@ -7,7 +7,7 @@ namespace Core\Activity\Domain\Events;
 /**
  * Event fired when an activity is successfully deleted.
  */
-readonly class ActivityDeletedEvent
+final readonly class ActivityDeletedEvent
 {
     public function __construct(
         public int $activityId,

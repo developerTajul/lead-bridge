@@ -6,7 +6,6 @@ namespace Core\Activity\Application\Mappers;
 
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
-use Core\Activity\Domain\Entities\ActivityEntity;
 
 /**
  * Maps an activity and its loaded relations to ActivityResponseDTO.

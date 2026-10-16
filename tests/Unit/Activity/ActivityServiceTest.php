@@ -314,8 +314,9 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_reopens_the_activity_when_the_dto_asks_for_it(): void
     {
-        $locked = $this->makeEntity();
-        $locked->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
+        // A reopen only has anything to clear on a completed row, which is what
+        // the lock read hands back here.
+        $locked = $this->makeEntity(completedAt: '2026-10-02 11:00:00');
 
         $this->willLock($locked);
 
@@ -348,6 +349,115 @@ final class ActivityServiceTest extends TestCase
         $this->assertTrue($result->isFailure());
         $this->assertSame('ACTIVITY_INVALID', $result->errorCode);
         $this->assertStringContainsString('cannot be completed in the future', $result->message);
+    }
+
+    public function test_update_clears_the_nullable_fields_when_the_dto_asks_for_it(): void
+    {
+        $this->willLock($this->makeEntity());
+
+        $captured = null;
+        $this->activityRepository->method('save')
+            ->willReturnCallback(function (ActivityEntity $entity) use (&$captured) {
+                $captured = $entity;
+
+                return $this->makeEntity();
+            });
+
+        $this->activityService->update(new ActivityUpdateDTO(
+            id: 1,
+            clearDueDate: true,
+            clearDescription: true,
+        ));
+
+        $this->assertNull($captured->getDueDate());
+        $this->assertNull($captured->getDescription());
+    }
+
+    /**
+     * A payload carrying reopen: true at an activity that is already pending
+     * asks for the state it is already in, so it is a no-op rather than a
+     * refusal. Clients send the flag with whatever else changed.
+     */
+    public function test_update_treats_a_reopen_of_a_pending_activity_as_a_no_op(): void
+    {
+        $this->willLock($this->makeEntity());
+
+        $this->transactionManager->expects($this->once())->method('commit');
+        $this->transactionManager->expects($this->never())->method('rollback');
+
+        $captured = null;
+        $this->activityRepository->method('save')
+            ->willReturnCallback(function (ActivityEntity $entity) use (&$captured) {
+                $captured = $entity;
+
+                return $this->makeEntity();
+            });
+
+        $result = $this->activityService->update(new ActivityUpdateDTO(id: 1, reopen: true));
+
+        $this->assertTrue($result->isSuccess());
+        $this->assertTrue($captured->isPending());
+        $this->assertNull($captured->getCompletedAt());
+    }
+
+    public function test_update_returns_failure_when_a_due_date_is_replaced_and_cleared_at_once(): void
+    {
+        $this->willLock($this->makeEntity());
+
+        $this->transactionManager->expects($this->once())->method('rollback');
+        $this->activityRepository->expects($this->never())->method('save');
+
+        $result = $this->activityService->update(new ActivityUpdateDTO(
+            id: 1,
+            dueDate: new \DateTimeImmutable('2026-12-01 10:00:00'),
+            clearDueDate: true,
+        ));
+
+        $this->assertTrue($result->isFailure());
+        $this->assertSame('ACTIVITY_INVALID', $result->errorCode);
+    }
+
+    /**
+     * A state transition the domain refuses must reach the caller as a domain
+     * refusal rather than a generic update failure. That mapping is also what
+     * makes the delivery layer answer 422 instead of 400.
+     */
+    public function test_update_maps_a_refused_transition_to_an_invalid_failure(): void
+    {
+        $pending = $this->makeEntity();
+
+        // The real sequence: the domain asks whether the activity is pending,
+        // then transitions it. Reproducing the transition here lets the test
+        // reach the service's catch for a domain refusal.
+        $this->willLock($pending);
+        $this->willRefuseTransitionOnSave($pending);
+
+        $this->transactionManager->expects($this->once())->method('rollback');
+        $this->transactionManager->expects($this->never())->method('commit');
+
+        $result = $this->activityService->update(new ActivityUpdateDTO(id: 1, subject: 'New subject'));
+
+        $this->assertTrue($result->isFailure());
+        $this->assertSame('ACTIVITY_INVALID', $result->errorCode);
+        $this->assertSame('The activity is not completed, so it cannot be reopened.', $result->message);
+    }
+
+    /**
+     * Makes save() transition the locked entity through reopen(), which a
+     * pending activity refuses.
+     *
+     * @param ActivityEntity $entity
+     *
+     * @return void
+     */
+    private function willRefuseTransitionOnSave(ActivityEntity $entity): void
+    {
+        $this->activityRepository->method('save')
+            ->willReturnCallback(function () use ($entity): ActivityEntity {
+                $entity->reopen();
+
+                return $entity;
+            });
     }
 
     public function test_update_returns_failure_when_activity_is_missing(): void
@@ -563,7 +673,7 @@ final class ActivityServiceTest extends TestCase
         );
     }
 
-    private function makeEntity(): ActivityEntity
+    private function makeEntity(?string $completedAt = null): ActivityEntity
     {
         return ActivityEntity::reconstitute(
             id: 1,
@@ -574,7 +684,7 @@ final class ActivityServiceTest extends TestCase
             userId: 7,
             description: 'Intro call with the prospect',
             dueDate: new \DateTimeImmutable('2026-10-05 09:30:00'),
-            completedAt: null,
+            completedAt: $completedAt !== null ? new \DateTimeImmutable($completedAt) : null,
         );
     }
 }

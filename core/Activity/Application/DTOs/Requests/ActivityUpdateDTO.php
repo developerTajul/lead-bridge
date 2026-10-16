@@ -11,7 +11,7 @@ use DateTimeImmutable;
  * Carries validated activity update input into the Service. Immutable.
  * Built exclusively by ActivityMapper - no factory methods here.
  */
-readonly class ActivityUpdateDTO
+final readonly class ActivityUpdateDTO
 {
     public function __construct(
         public int $id,
@@ -21,5 +21,9 @@ readonly class ActivityUpdateDTO
         public ?DateTimeImmutable $dueDate = null,
         public ?DateTimeImmutable $completedAt = null,
         public bool $reopen = false,
+        // A null field normally means "leave unchanged", so an explicit clear
+        // has to be carried as its own intent.
+        public bool $clearDueDate = false,
+        public bool $clearDescription = false,
     ) {}
 }

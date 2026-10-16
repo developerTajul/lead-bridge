@@ -53,7 +53,13 @@ final class ApiActivityUpdateValidationTest extends TestCase
             'completed_at' => '2026-10-04 08:15:00',
         ]);
 
-        $response->assertOk();
+        // The stub row is completed, so a completion is a domain refusal (422),
+        // not a bad payload. What matters here is that the payload passed
+        // validation and reached the domain.
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'ACTIVITY_INVALID');
+        $response->assertJsonPath('message', 'The activity is already completed.');
+        $response->assertJsonMissingValidationErrors('completed_at');
     }
 
     public function test_reopening_on_its_own_is_accepted(): void
@@ -72,7 +78,13 @@ final class ApiActivityUpdateValidationTest extends TestCase
             'completed_at' => '2026-10-04 08:15:00',
         ]);
 
-        $response->assertOk();
+        // A benign false flag must not trip the reopen/completion conflict, so
+        // the completion is judged on its own. The stub row is completed, so
+        // that judgement is a domain refusal rather than a validation error.
+        $response->assertStatus(422);
+        $response->assertJsonPath('error_code', 'ACTIVITY_INVALID');
+        $response->assertJsonPath('message', 'The activity is already completed.');
+        $response->assertJsonMissingValidationErrors('completed_at');
     }
 
     public function test_an_explicit_null_completion_time_does_not_conflict_with_reopening(): void
@@ -131,6 +143,9 @@ final class ApiActivityUpdateValidationTest extends TestCase
             type: ActivityType::CALL,
             subject: 'Discovery call',
             userId: 7,
+            // The row a reopen payload reads back under the lock is a completed
+            // one, since that is the only state a reopen has to change.
+            completedAt: new \DateTimeImmutable('2026-10-02 11:00:00'),
         );
     }
 }

@@ -9,10 +9,9 @@ use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
 
 /**
- * Carries the raw activity list criteria INTO the Service. Immutable.
- * Built exclusively by the module's Request Mapper - no factory methods here.
+ * Carries the activity list criteria into the Service. Built by ActivityMapper.
  */
-readonly class ActivityFilterDTO
+final readonly class ActivityFilterDTO
 {
     public function __construct(
         public ?ActivityStatus $status = null,

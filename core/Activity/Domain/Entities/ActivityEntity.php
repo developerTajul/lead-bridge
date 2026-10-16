@@ -43,6 +43,7 @@ final class ActivityEntity
      * @param string|null            $description
      * @param DateTimeImmutable|null $dueDate
      * @param DateTimeImmutable|null $completedAt
+     * @param DateTimeImmutable|null $now Clock to compare against; defaults to the current time.
      *
      * @return self
      *
@@ -56,7 +57,8 @@ final class ActivityEntity
         ?int $userId = null,
         ?string $description = null,
         ?DateTimeImmutable $dueDate = null,
-        ?DateTimeImmutable $completedAt = null
+        ?DateTimeImmutable $completedAt = null,
+        ?DateTimeImmutable $now = null
     ): self
     {
         if (trim($subject) === '') {
@@ -68,7 +70,7 @@ final class ActivityEntity
         }
 
         if ($completedAt !== null) {
-            self::assertCompletable($completedAt);
+            self::assertCompletable($completedAt, $now);
         }
 
         return new self(
@@ -201,13 +203,16 @@ final class ActivityEntity
 
     /**
      * Applies new details to the activity. Only arguments that are not null
-     * are applied; null means "leave unchanged". Reached through
-     * applyChanges(), which is the single entry point for mutation.
+     * are applied; null means "leave unchanged". A clear flag drops the field
+     * instead. Reached through applyChanges(), which is the single entry point
+     * for mutation.
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
      * @param string|null            $description
      * @param DateTimeImmutable|null $dueDate
+     * @param bool                   $clearDueDate
+     * @param bool                   $clearDescription
      *
      * @return void
      *
@@ -217,7 +222,9 @@ final class ActivityEntity
         ?string $subject = null,
         ?ActivityType $type = null,
         ?string $description = null,
-        ?DateTimeImmutable $dueDate = null
+        ?DateTimeImmutable $dueDate = null,
+        bool $clearDueDate = false,
+        bool $clearDescription = false
     ): void {
         if ($subject !== null && trim($subject) === '') {
             throw InvalidActivityException::emptySubject();
@@ -231,27 +238,34 @@ final class ActivityEntity
             $this->type = $type;
         }
 
-        if ($description !== null) {
+        if ($clearDescription) {
+            $this->clearDescription();
+        } elseif ($description !== null) {
             $this->description = $description;
         }
 
-        if ($dueDate !== null) {
+        if ($clearDueDate) {
+            $this->clearDueDate();
+        } elseif ($dueDate !== null) {
             $this->dueDate = $dueDate;
         }
     }
 
     /**
-     * Applies an update payload. Null fields stay unchanged; a completion
-     * time marks the activity completed, and the reopen flag clears an
-     * existing completion. Every value is validated before the entity is
-     * mutated, so a rejected payload leaves the activity untouched.
+     * Applies an update payload. A null field stays unchanged, a clear flag
+     * drops it, completedAt completes the activity and reopen clears an
+     * existing completion. The whole payload is validated up front, so a
+     * rejected update leaves the activity untouched.
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
      * @param string|null            $description
      * @param DateTimeImmutable|null $dueDate
      * @param DateTimeImmutable|null $completedAt
-     * @param bool                   $reopen
+     * @param bool                   $reopen           Clear an existing completion.
+     * @param bool                   $clearDueDate     Drop the due date.
+     * @param bool                   $clearDescription Drop the description.
+     * @param DateTimeImmutable|null $now Clock to compare against; defaults to the current time.
      *
      * @return void
      *
@@ -263,43 +277,60 @@ final class ActivityEntity
         ?string $description = null,
         ?DateTimeImmutable $dueDate = null,
         ?DateTimeImmutable $completedAt = null,
-        bool $reopen = false
+        bool $reopen = false,
+        bool $clearDueDate = false,
+        bool $clearDescription = false,
+        ?DateTimeImmutable $now = null
     ): void {
-        $this->assertUpdateIsApplicable($subject, $completedAt, $reopen);
+        $this->assertUpdateIsApplicable($subject, $dueDate, $completedAt, $reopen, $clearDueDate);
 
         $this->updateDetails(
             subject: $subject,
             type: $type,
             description: $description,
             dueDate: $dueDate,
+            clearDueDate: $clearDueDate,
+            clearDescription: $clearDescription,
         );
 
         if ($reopen) {
-            $this->reopen();
+            // A payload asking to reopen an activity that is already pending is
+            // a no-op, not a contradiction: it carries no completion time, so
+            // the end state is the one the caller asked for. reopen() itself
+            // stays strict for direct callers.
+            if (! $this->isPending()) {
+                $this->reopen();
+            }
 
             return;
         }
 
         if ($completedAt !== null) {
-            $this->markCompleted($completedAt);
+            $this->markCompleted($completedAt, $now);
         }
     }
 
     /**
-     * Checks an update payload before any of it is applied.
+     * Checks an update payload before any of it is applied. The completion
+     * time is only checked for its own contradiction here; markCompleted()
+     * is what asserts it is actually completable.
      *
      * @param string|null            $subject
+     * @param DateTimeImmutable|null $dueDate
      * @param DateTimeImmutable|null $completedAt
      * @param bool                   $reopen
+     * @param bool                   $clearDueDate
      *
      * @return void
      *
-     * @throws InvalidActivityException When the payload is contradictory or breaks an invariant.
+     * @throws InvalidActivityException When the payload is contradictory.
      */
     private function assertUpdateIsApplicable(
         ?string $subject,
+        ?DateTimeImmutable $dueDate,
         ?DateTimeImmutable $completedAt,
-        bool $reopen
+        bool $reopen,
+        bool $clearDueDate
     ): void {
         if ($subject !== null && trim($subject) === '') {
             throw InvalidActivityException::emptySubject();
@@ -310,19 +341,10 @@ final class ActivityEntity
             throw InvalidActivityException::conflictingCompletionAndReopen();
         }
 
-        if ($reopen) {
-            return;
+        // A replacement and a clear for the same field contradict each other.
+        if ($clearDueDate && $dueDate !== null) {
+            throw InvalidActivityException::conflictingDueDateAndClear();
         }
-
-        if ($completedAt === null) {
-            return;
-        }
-
-        if (! $this->isPending()) {
-            throw InvalidActivityException::alreadyCompleted();
-        }
-
-        self::assertCompletable($completedAt);
     }
 
     /**
@@ -370,10 +392,36 @@ final class ActivityEntity
      * Clears the completion marker, putting the activity back to pending.
      *
      * @return void
+     *
+     * @throws InvalidActivityException When the activity is already pending.
      */
     public function reopen(): void
     {
+        if ($this->isPending()) {
+            throw InvalidActivityException::notCompleted();
+        }
+
         $this->completedAt = null;
+    }
+
+    /**
+     * Drops the due date.
+     *
+     * @return void
+     */
+    public function clearDueDate(): void
+    {
+        $this->dueDate = null;
+    }
+
+    /**
+     * Drops the description.
+     *
+     * @return void
+     */
+    public function clearDescription(): void
+    {
+        $this->description = null;
     }
 
     /**

@@ -198,6 +198,8 @@ final class ActivityService
                 dueDate: $activityUpdateDTO->dueDate,
                 completedAt: $activityUpdateDTO->completedAt,
                 reopen: $activityUpdateDTO->reopen,
+                clearDueDate: $activityUpdateDTO->clearDueDate,
+                clearDescription: $activityUpdateDTO->clearDescription,
             );
 
             $this->activityRepository->save($activityEntity);

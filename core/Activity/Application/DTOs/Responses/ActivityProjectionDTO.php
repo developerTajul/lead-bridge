@@ -12,7 +12,7 @@ use DateTimeImmutable;
  * entity with its resolved relations and timestamps, so the entity itself
  * stays free of projection state.
  */
-readonly class ActivityProjectionDTO
+final readonly class ActivityProjectionDTO
 {
     public function __construct(
         public ActivityEntity $entity,

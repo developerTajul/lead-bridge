@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Application\DTOs\Responses;
 
-readonly class ActivityResponseDTO
+final readonly class ActivityResponseDTO
 {
     public function __construct(
         public ?int $id,
