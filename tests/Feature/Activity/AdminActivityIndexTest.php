@@ -106,7 +106,7 @@ final class AdminActivityIndexTest extends TestCase
         $response->assertOk();
         $response->assertSee('Discovery call');
         $response->assertSee('Lead #42');
-        $response->assertSee('2026-10-05 09:30:00');
+        $response->assertSee('2026-10-05T09:30:00+00:00');
         $response->assertSee('Open');
         $this->assertCount(1, $this->receivedFilters);
     }

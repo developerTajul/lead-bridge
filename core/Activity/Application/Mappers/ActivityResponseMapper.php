@@ -6,6 +6,7 @@ namespace Core\Activity\Application\Mappers;
 
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
+use DateTimeInterface;
 
 /**
  * Maps an activity and its loaded relations to ActivityResponseDTO.
@@ -31,10 +32,13 @@ final class ActivityResponseMapper
             type: $entity->getType()->value,
             subject: $entity->getSubject(),
             description: $entity->getDescription(),
-            due_date: $entity->getDueDate()?->format('Y-m-d H:i:s'),
-            completed_at: $entity->getCompletedAt()?->format('Y-m-d H:i:s'),
-            created_at: $projection->createdAt?->format('Y-m-d\TH:i:s.000000\Z'),
-            updated_at: $projection->updatedAt?->format('Y-m-d\TH:i:s.000000\Z'),
+            // Every datetime leaves on the same ISO-8601 wire format, so a
+            // client parses all four the same way. ATOM rather than Carbon's
+            // toIso8601String(), because these are native DateTimeImmutable.
+            due_date: $entity->getDueDate()?->format(DateTimeInterface::ATOM),
+            completed_at: $entity->getCompletedAt()?->format(DateTimeInterface::ATOM),
+            created_at: $projection->createdAt?->format(DateTimeInterface::ATOM),
+            updated_at: $projection->updatedAt?->format(DateTimeInterface::ATOM),
             user: $projection->user,
             trackable: $projection->trackable
         );

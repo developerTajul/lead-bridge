@@ -18,6 +18,7 @@ use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
+use DateTimeInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -361,8 +362,8 @@ final class ActivityService
             description: $savedEntity->getDescription(),
             // Formatted the way ActivityResponseMapper does, so both paths
             // produce the same wire format.
-            due_date: $savedEntity->getDueDate()?->format('Y-m-d H:i:s'),
-            completed_at: $savedEntity->getCompletedAt()?->format('Y-m-d H:i:s'),
+            due_date: $savedEntity->getDueDate()?->format(DateTimeInterface::ATOM),
+            completed_at: $savedEntity->getCompletedAt()?->format(DateTimeInterface::ATOM),
         );
     }
 

@@ -93,11 +93,29 @@ final class ActivityReadBackResilienceTest extends TestCase
         $this->assertSame('call', $response->type);
         $this->assertSame('Discovery call', $response->subject);
         $this->assertSame('Intro call with the prospect', $response->description);
-        $this->assertSame('2026-10-05 09:30:00', $response->due_date);
+        $this->assertSame('2026-10-05T09:30:00+00:00', $response->due_date);
         $this->assertNull($response->completed_at);
         // The entity carries neither, so they stay null rather than being invented.
         $this->assertNull($response->created_at);
         $this->assertNull($response->trackable);
+    }
+
+    /**
+     * The two response paths share one wire format. A client that parses
+     * created_at must be able to parse due_date the same way, or it has to
+     * branch on which field it is reading.
+     */
+    public function test_the_read_back_response_uses_one_datetime_format(): void
+    {
+        $result = $this->makeService(readBack: 'ok')->create($this->makeCreateDTO());
+
+        /** @var ActivityResponseDTO $response */
+        $response = $result->getData();
+
+        $this->assertSame('2026-10-05T09:30:00+00:00', $response->due_date);
+        $this->assertSame('2026-10-01T08:00:00+00:00', $response->created_at);
+        $this->assertSame('2026-10-01T08:00:00+00:00', $response->updated_at);
+        $this->assertNull($response->completed_at);
     }
 
     /**
