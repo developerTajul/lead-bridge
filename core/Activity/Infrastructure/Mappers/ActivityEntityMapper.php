@@ -14,6 +14,15 @@ use Core\Activity\Domain\Enums\ActivityType;
 final class ActivityEntityMapper
 {
     /**
+     * The only relation fields exposed by the read model. A relation's raw
+     * array also carries columns the response has no business returning
+     * (a user's email or password hash, a lead's phone number).
+     *
+     * @var array<int, string>
+     */
+    private const RELATION_FIELDS = ['id', 'name'];
+
+    /**
      * Builds a pure domain entity from a model array.
      *
      * @param array $data
@@ -48,10 +57,35 @@ final class ActivityEntityMapper
     {
         return new ActivityProjectionDTO(
             entity: $this->toEntity($data),
-            user: $data['user'] ?? null,
-            trackable: $data['trackable'] ?? null,
+            user: $this->toRelationSummary($data['user'] ?? null),
+            trackable: $this->toRelationSummary($data['trackable'] ?? null),
             createdAt: !empty($data['created_at']) ? new \DateTimeImmutable($data['created_at']) : null,
             updatedAt: !empty($data['updated_at']) ? new \DateTimeImmutable($data['updated_at']) : null,
         );
+    }
+
+    /**
+     * Narrows a loaded relation to the fields the response may expose, so
+     * sensitive columns never leave this boundary.
+     *
+     * @param array|null $relation
+     *
+     * @return array<string, mixed>|null
+     */
+    private function toRelationSummary(?array $relation): ?array
+    {
+        if ($relation === null) {
+            return null;
+        }
+
+        $summary = [];
+
+        foreach (self::RELATION_FIELDS as $field) {
+            if (array_key_exists($field, $relation)) {
+                $summary[$field] = $relation[$field];
+            }
+        }
+
+        return $summary;
     }
 }

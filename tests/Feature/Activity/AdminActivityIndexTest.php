@@ -173,11 +173,6 @@ final class AdminActivityIndexTest extends TestCase
                 private AdminActivityIndexTest $test,
             ) {}
 
-            public function paginate(int $perPage = 10): PaginatedResult
-            {
-                return new PaginatedResult([], 0, 1, $perPage, 1);
-            }
-
             public function getFilteredActivities(ActivityFilter $filter): PaginatedResult
             {
                 $this->test->recordFilter($filter);
@@ -199,6 +194,18 @@ final class AdminActivityIndexTest extends TestCase
             public function findById(int $id): ?ActivityProjectionDTO
             {
                 return null;
+            }
+
+            private function makeEntity(): ActivityEntity
+            {
+                return ActivityEntity::reconstitute(
+                    id: 1,
+                    trackableType: 'App\\Models\\Lead',
+                    trackableId: 42,
+                    type: ActivityType::CALL,
+                    subject: 'Discovery call',
+                    userId: 7,
+                );
             }
         };
 

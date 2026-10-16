@@ -11,6 +11,19 @@ use Core\Activity\Domain\Exceptions\InvalidActivityException;
  */
 final readonly class TrackableType
 {
+    /**
+     * The record types an activity may be attached to. Without this, any
+     * class name from request input would be accepted as a morph target.
+     *
+     * @var array<int, string>
+     */
+    private const ALLOWED_TYPES = [
+        'App\\Models\\Lead',
+        'App\\Models\\Deal',
+        'App\\Models\\Contact',
+        'App\\Models\\Company',
+    ];
+
     private function __construct(private string $value) {}
 
     /**
@@ -20,7 +33,7 @@ final readonly class TrackableType
      *
      * @return self
      *
-     * @throws InvalidActivityException When the value is blank.
+     * @throws InvalidActivityException When the value is blank or not an allowed record type.
      */
     public static function fromString(string $value): self
     {
@@ -28,7 +41,21 @@ final readonly class TrackableType
             throw InvalidActivityException::emptyTrackableType();
         }
 
+        if (! in_array($value, self::ALLOWED_TYPES, true)) {
+            throw InvalidActivityException::unsupportedTrackableType($value);
+        }
+
         return new self($value);
+    }
+
+    /**
+     * The record types that may be attached to an activity.
+     *
+     * @return array<int, string>
+     */
+    public static function allowedTypes(): array
+    {
+        return self::ALLOWED_TYPES;
     }
 
     /**

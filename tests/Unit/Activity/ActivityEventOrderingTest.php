@@ -76,19 +76,7 @@ final class ActivityEventOrderingTest extends TestCase
             {
                 $this->log[] = 'repository.save';
 
-                return ActivityEntity::reconstitute(
-                    id: 5,
-                    trackableType: 'App\\Models\\Lead',
-                    trackableId: 42,
-                    type: ActivityType::CALL,
-                    subject: 'Discovery call',
-                    userId: 7,
-                );
-            }
-
-            public function paginate(int $perPage = 10): PaginatedResult
-            {
-                return new PaginatedResult([], 0, 1, $perPage, 1);
+                return $this->makeEntity();
             }
 
             public function getFilteredActivities(ActivityFilter $filter): PaginatedResult
@@ -98,7 +86,8 @@ final class ActivityEventOrderingTest extends TestCase
 
             public function findById(int $id): ?ActivityProjectionDTO
             {
-                return null;
+                // The write paths read the saved row back to build the response.
+                return new ActivityProjectionDTO(entity: $this->makeEntity());
             }
 
             public function findByIdWithLock(int $id): ?ActivityEntity
@@ -107,6 +96,18 @@ final class ActivityEventOrderingTest extends TestCase
             }
 
             public function delete(ActivityEntity $activity): void {}
+
+            private function makeEntity(): ActivityEntity
+            {
+                return ActivityEntity::reconstitute(
+                    id: 5,
+                    trackableType: 'App\\Models\\Lead',
+                    trackableId: 42,
+                    type: ActivityType::CALL,
+                    subject: 'Discovery call',
+                    userId: 7,
+                );
+            }
         };
 
         $transactionManager = new class($this->log) implements TransactionManagerContract {

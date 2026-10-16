@@ -27,6 +27,15 @@ use RuntimeException;
 final class ActivityRepository extends BaseRepository implements ActivityRepositoryContract, ActivityQueryContract
 {
     /**
+     * Rows read under a lock, keyed by activity ID. The lock read keeps the
+     * model here so the matching save() writes back to the same instance
+     * instead of fetching the row a second time.
+     *
+     * @var array<int, Activity>
+     */
+    private array $lockedModels = [];
+
+    /**
      * @param Activity             $model
      * @param ActivityEntityMapper $mapper
      */
@@ -48,17 +57,19 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
      */
     public function save(ActivityEntity $activity): ActivityEntity
     {
-        $activityModel = $activity->getId() === null
-            ? new Activity()
-            : $this->findRecord((int) $activity->getId());
+        return $this->write($activity, $this->takeLockedRecord($activity));
+    }
 
-        if (! $activityModel) {
-            throw new RuntimeException(sprintf(
-                'Activity with ID %d no longer exists.',
-                (int) $activity->getId(),
-            ));
-        }
-
+    /**
+     * Fills and persists the given row from the entity's state.
+     *
+     * @param ActivityEntity $activity
+     * @param Activity       $activityModel
+     *
+     * @return ActivityEntity
+     */
+    private function write(ActivityEntity $activity, Activity $activityModel): ActivityEntity
+    {
         $activityModel->fill($this->toPersistence($activity));
         $activityModel->save();
 
@@ -66,26 +77,44 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     }
 
     /**
-     * @param int $perPage Items per page (default: 10).
+     * Resolves the row to write: the one a lock read already produced for this
+     * ID, otherwise a fresh instance for an insert or a fetched row for an
+     * update.
      *
-     * @return PaginatedResult
+     * @param ActivityEntity $activity
+     *
+     * @return Activity
+     *
+     * @throws RuntimeException When the entity carries an ID that no longer exists.
      */
-    public function paginate(int $perPage = 10): PaginatedResult
+    private function takeLockedRecord(ActivityEntity $activity): Activity
     {
-        $paginator = $this->paginateEloquent($perPage);
+        $id = $activity->getId();
 
-        $entities = $paginator
-            ->getCollection()
-            ->map(fn(Activity $item) => $this->mapper->toProjection($item->toArray()))
-            ->all();
+        if ($id === null) {
+            return new Activity();
+        }
 
-        return new PaginatedResult(
-            items: $entities,
-            total: $paginator->total(),
-            currentPage: $paginator->currentPage(),
-            perPage: $paginator->perPage(),
-            lastPage: $paginator->lastPage(),
-        );
+        // Consumed once: the cached row is dropped so a later save() for the
+        // same ID reads the current state rather than reusing a stale model.
+        if (isset($this->lockedModels[$id])) {
+            $activityModel = $this->lockedModels[$id];
+
+            unset($this->lockedModels[$id]);
+
+            return $activityModel;
+        }
+
+        $activityModel = $this->findRecord($id);
+
+        if (! $activityModel) {
+            throw new RuntimeException(sprintf(
+                'Activity with ID %d no longer exists.',
+                (int) $id,
+            ));
+        }
+
+        return $activityModel;
     }
 
     /**
@@ -152,6 +181,9 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     }
 
     /**
+     * Locks the row and returns its entity. The locked model is kept so the
+     * save() that follows writes back to this same row.
+     *
      * @param int $id
      *
      * @return ActivityEntity|null
@@ -164,17 +196,28 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
             return null;
         }
 
+        $this->lockedModels[$id] = $activityModel;
+
         return $this->mapper->toEntity($activityModel->toArray());
     }
 
     /**
+     * Deletes an activity.
+     *
      * @param ActivityEntity $activity
      *
      * @return void
+     *
+     * @throws RuntimeException When the row could not be deleted.
      */
     public function delete(ActivityEntity $activity): void
     {
-        $this->deleteRecord((int) $activity->getId());
+        if (! $this->deleteRecord((int) $activity->getId())) {
+            throw new RuntimeException(sprintf(
+                'Activity with ID %d could not be deleted.',
+                (int) $activity->getId(),
+            ));
+        }
     }
 
     /**
@@ -193,8 +236,10 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
             'type' => $activity->getType()->value,
             'subject' => $activity->getSubject(),
             'description' => $activity->getDescription(),
-            'due_date' => $activity->getDueDate()?->format('Y-m-d H:i:s'),
-            'completed_at' => $activity->getCompletedAt()?->format('Y-m-d H:i:s'),
+            // Stored as UTC so the model's datetime cast reads back the same
+            // instant regardless of the app timezone.
+            'due_date' => $activity->getDueDate()?->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+            'completed_at' => $activity->getCompletedAt()?->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
         ];
     }
 }

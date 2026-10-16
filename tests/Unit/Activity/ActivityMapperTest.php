@@ -6,6 +6,7 @@ namespace Tests\Unit\Activity;
 
 use Core\Activity\Application\Mappers\ActivityMapper;
 use Core\Activity\Domain\Enums\ActivityType;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -56,9 +57,20 @@ final class ActivityMapperTest extends TestCase
 
     public function test_create_dto_rejects_an_unparseable_due_date(): void
     {
-        $this->expectException(\Exception::class);
+        // A bad date is request input, so it fails as a handled bad request
+        // rather than escaping as a raw date-parsing error.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('for field [due_date]');
 
         $this->mapper->mapToCreateDTO($this->createPayload(['due_date' => 'not-a-date']));
+    }
+
+    public function test_create_dto_rejects_an_unknown_type_rather_than_raising_a_value_error(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('for field [type]');
+
+        $this->mapper->mapToCreateDTO($this->createPayload(['type' => 'sms']));
     }
 
     public function test_update_dto_parses_dates_into_immutable_objects(): void
@@ -84,9 +96,18 @@ final class ActivityMapperTest extends TestCase
 
     public function test_update_dto_rejects_an_unparseable_completion_time(): void
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('for field [completed_at]');
 
         $this->mapper->mapToUpdateDTO(1, ['completed_at' => 'not-a-date']);
+    }
+
+    public function test_update_dto_rejects_an_unknown_type(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('for field [type]');
+
+        $this->mapper->mapToUpdateDTO(1, ['type' => 'sms']);
     }
 
     public function test_update_dto_maps_the_reopen_flag(): void
@@ -94,6 +115,37 @@ final class ActivityMapperTest extends TestCase
         $dto = $this->mapper->mapToUpdateDTO(1, ['reopen' => true]);
 
         $this->assertTrue($dto->reopen);
+    }
+
+    /**
+     * Regression: a plain (bool) cast reads the string "false" as true, which
+     * silently reopened activities.
+     */
+    #[DataProvider('reopenWireValues')]
+    public function test_update_dto_reads_the_reopen_flag_as_a_real_boolean(
+        mixed $wireValue,
+        bool $expected,
+    ): void {
+        $dto = $this->mapper->mapToUpdateDTO(1, ['reopen' => $wireValue]);
+
+        $this->assertSame($expected, $dto->reopen);
+    }
+
+    /**
+     * @return array<string, array{mixed, bool}>
+     */
+    public static function reopenWireValues(): array
+    {
+        return [
+            'string false' => ['false', false],
+            'string true' => ['true', true],
+            'string zero' => ['0', false],
+            'string one' => ['1', true],
+            'boolean false' => [false, false],
+            'boolean true' => [true, true],
+            'integer zero' => [0, false],
+            'integer one' => [1, true],
+        ];
     }
 
     public function test_update_dto_maps_the_type_enum(): void

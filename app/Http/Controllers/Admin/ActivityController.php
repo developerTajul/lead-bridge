@@ -7,7 +7,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ActivityStoreRequest;
 use Core\Activity\Application\Contracts\ActivityMapperContract;
-use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Services\ActivityService;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Illuminate\Http\RedirectResponse;
@@ -41,13 +40,13 @@ final class ActivityController extends Controller
     {
         // A stale bookmark or hand-edited URL must not break the list, so an
         // unusable filter value is dropped and reported instead of rejected.
-        [$filterDTO, $ignoredFilters] = ActivityFilterDTO::fromRequestLenient(
-            status: $request->input('status'),
-            type: $request->input('type'),
-            userId: $request->filled('user_id') ? $request->integer('user_id') : null,
-            filter: $request->input('filter'),
-            perPage: min((int) $request->input('per_page', self::DEFAULT_PER_PAGE), self::MAX_PER_PAGE),
+        $queryParams = $request->query();
+        $queryParams['per_page'] = min(
+            (int) $request->input('per_page', self::DEFAULT_PER_PAGE),
+            self::MAX_PER_PAGE,
         );
+
+        [$filterDTO, $ignoredFilters] = $this->mapper->mapToFilterDTOLenient($queryParams);
 
         if ($ignoredFilters !== []) {
             session()->flash('warning', self::INVALID_FILTER_WARNING);
@@ -62,7 +61,7 @@ final class ActivityController extends Controller
                     items: [],
                     total: 0,
                     currentPage: 1,
-                    perPage: $perPage,
+                    perPage: $filterDTO->perPage,
                     lastPage: 1,
                 ),
                 'error' => $result->getMessage(),

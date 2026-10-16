@@ -201,7 +201,8 @@ final class ActivityEntity
 
     /**
      * Applies new details to the activity. Only arguments that are not null
-     * are applied; null means "leave unchanged".
+     * are applied; null means "leave unchanged". Reached through
+     * applyChanges(), which is the single entry point for mutation.
      *
      * @param string|null            $subject
      * @param ActivityType|null      $type
@@ -212,7 +213,7 @@ final class ActivityEntity
      *
      * @throws InvalidActivityException When an empty subject is supplied.
      */
-    public function updateDetails(
+    private function updateDetails(
         ?string $subject = null,
         ?ActivityType $type = null,
         ?string $description = null,

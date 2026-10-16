@@ -16,15 +16,6 @@ use Core\Shared\Domain\DataObjects\PaginatedResult;
 interface ActivityQueryContract
 {
     /**
-     * Returns a paginated list of activities.
-     *
-     * @param int $perPage Items per page (default: 10).
-     *
-     * @return PaginatedResult Items are ActivityProjectionDTO instances.
-     */
-    public function paginate(int $perPage = 10): PaginatedResult;
-
-    /**
      * Returns the activities matching the given filter criteria.
      *
      * @param ActivityFilter $filter

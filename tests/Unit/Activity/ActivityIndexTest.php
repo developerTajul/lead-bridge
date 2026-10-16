@@ -102,11 +102,11 @@ final class ActivityIndexTest extends TestCase
                 return $this->makePaginatedResult();
             });
 
-        $this->activityService->getActivities(ActivityFilterDTO::fromRequest(
-            status: 'pending',
-            type: 'call',
+        $this->activityService->getActivities(new ActivityFilterDTO(
+            status: ActivityStatus::PENDING,
+            type: ActivityType::CALL,
             userId: 7,
-            filter: 'today',
+            filter: ActivityPeriod::TODAY,
             perPage: 25,
         ));
 

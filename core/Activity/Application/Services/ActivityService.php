@@ -9,6 +9,7 @@ use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
+use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
@@ -60,15 +61,15 @@ final class ActivityService
 
             $savedEntity = $this->activityRepository->save($createdEntity);
 
-            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO(
-                new ActivityProjectionDTO(entity: $savedEntity)
-            );
-
             // Listeners are dispatched from the saved entity, which is the only
             // one carrying an ID. The created entity records nothing.
             $savedEntity->recordCreated();
 
             $this->transactionManager->commit();
+
+            // Read back on the read side: save() returns a write-side entity,
+            // so the DB-generated columns and relations only come from here.
+            $activityResponseDTO = $this->projectSavedActivity((int) $savedEntity->getId());
         } catch (InvalidActivityException $exception) {
             $this->transactionManager->rollback();
 
@@ -88,6 +89,12 @@ final class ActivityService
                 message: 'Failed to create the activity. Please try again.',
                 errorCode: 'ACTIVITY_CREATE_FAILED',
             );
+        }
+
+        // The row is committed by this point, so a read-back that came up empty
+        // is a response-assembly failure, not a rolled-back create.
+        if (! $activityResponseDTO) {
+            return $this->savedActivityUnreadable('create');
         }
 
         // The activity is already committed: a failing listener must not turn
@@ -121,6 +128,13 @@ final class ActivityService
                 data: $mappedPaginatedResult,
                 message: 'Activities retrieved successfully.'
             );
+        } catch (InvalidActivityException $exception) {
+            // A rejected filter is bad input, not a system failure.
+            $this->logger->warning('Activity list rejected an invalid filter.', [
+                'message' => $exception->getMessage(),
+            ]);
+
+            return Result::failure($exception->getMessage(), self::ERROR_INVALID);
         } catch (\Throwable $exception) {
             $this->logger->error('Failed to retrieve activities.', ['exception' => $exception]);
             return Result::failure('Failed to retrieve activities.', 'ACTIVITY_INDEX_FAILED');
@@ -163,7 +177,8 @@ final class ActivityService
         try {
             $this->transactionManager->beginTransaction();
 
-            // Row-level lock: the entity read here is the one we mutate and save.
+            // Row-level lock. The repository holds the locked row so the save()
+            // below writes back to it instead of fetching it a second time.
             $activityEntity = $this->activityRepository->findByIdWithLock($activityUpdateDTO->id);
 
             if (! $activityEntity) {
@@ -185,26 +200,17 @@ final class ActivityService
                 reopen: $activityUpdateDTO->reopen,
             );
 
-            // The mutated entity is handed straight to the repository.
-            $updatedActivity = $this->activityRepository->save($activityEntity);
+            $this->activityRepository->save($activityEntity);
 
             // save() hydrates a fresh entity, so anything the mutated instance
             // recorded has to be released before that return value replaces it.
             // Released after the save so events raised during persistence count.
             $recordedEvents = $activityEntity->releaseEvents();
 
-            $activityResponseDTO = $this->activityResponseMapper->toResponseDTO(
-                new ActivityProjectionDTO(entity: $updatedActivity)
-            );
-
             $this->transactionManager->commit();
 
-            $this->dispatchEvents($recordedEvents);
-
-            return Result::success(
-                data: $activityResponseDTO,
-                message: 'Activity updated successfully.',
-            );
+            // Read back on the read side, for the same reason as create().
+            $activityResponseDTO = $this->projectSavedActivity($activityUpdateDTO->id);
         } catch (InvalidActivityException $exception) {
             $this->transactionManager->rollback();
 
@@ -226,6 +232,21 @@ final class ActivityService
                 errorCode: 'ACTIVITY_UPDATE_FAILED',
             );
         }
+
+        // The row is committed by this point, so a read-back that came up empty
+        // is a response-assembly failure, not a rolled-back update.
+        if (! $activityResponseDTO) {
+            return $this->savedActivityUnreadable('update');
+        }
+
+        // The change is already committed: a failing listener must not turn a
+        // successful update into an error response.
+        $this->dispatchEvents($recordedEvents);
+
+        return Result::success(
+            data: $activityResponseDTO,
+            message: 'Activity updated successfully.',
+        );
     }
 
     /**
@@ -285,6 +306,44 @@ final class ActivityService
         return Result::success(
             data: null,
             message: 'Activity deleted successfully.',
+        );
+    }
+
+    /**
+     * Re-reads a just-saved activity through the query port and maps it to the
+     * response DTO. The write side returns a domain entity only, so the
+     * DB-generated columns and the loaded relations have to come from a read.
+     *
+     * @param int $id
+     *
+     * @return ActivityResponseDTO|null Null when the row cannot be read back.
+     */
+    private function projectSavedActivity(int $id): ?ActivityResponseDTO
+    {
+        $activityProjection = $this->activityQuery->findById($id);
+
+        if (! $activityProjection) {
+            return null;
+        }
+
+        return $this->activityResponseMapper->toResponseDTO($activityProjection);
+    }
+
+    /**
+     * Reports a write that committed but could not be read back afterwards.
+     * Only reachable if the row vanished between the commit and the read.
+     *
+     * @param string $operation
+     *
+     * @return Result
+     */
+    private function savedActivityUnreadable(string $operation): Result
+    {
+        $this->logger->error('Saved activity could not be read back.', ['operation' => $operation]);
+
+        return Result::failure(
+            message: "The activity was {$operation}d but could not be read back.",
+            errorCode: 'ACTIVITY_READ_BACK_FAILED',
         );
     }
 

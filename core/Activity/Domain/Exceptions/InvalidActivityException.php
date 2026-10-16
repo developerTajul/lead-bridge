@@ -45,6 +45,21 @@ final class InvalidActivityException extends RuntimeException
     }
 
     /**
+     * Reports a trackable type that is not an allowed record type.
+     *
+     * @param string $trackableType
+     *
+     * @return self
+     */
+    public static function unsupportedTrackableType(string $trackableType): self
+    {
+        return new self(sprintf(
+            'Unsupported trackable type [%s].',
+            $trackableType,
+        ));
+    }
+
+    /**
      * Reports a completion of an activity that is already completed.
      *
      * @return self

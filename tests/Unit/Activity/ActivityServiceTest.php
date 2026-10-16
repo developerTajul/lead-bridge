@@ -7,6 +7,7 @@ namespace Tests\Unit\Activity;
 use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
+use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Application\Services\ActivityService;
@@ -27,6 +28,8 @@ final class ActivityServiceTest extends TestCase
 {
     private ActivityRepositoryContract $activityRepository;
 
+    private ActivityQueryContract $activityQuery;
+
     private TransactionManagerContract $transactionManager;
 
     private EventDispatcherContract $eventDispatcher;
@@ -38,17 +41,23 @@ final class ActivityServiceTest extends TestCase
         parent::setUp();
 
         $this->activityRepository = $this->createMock(ActivityRepositoryContract::class);
+        $this->activityQuery = $this->createMock(ActivityQueryContract::class);
         $this->transactionManager = $this->createMock(TransactionManagerContract::class);
         $this->eventDispatcher = $this->createMock(EventDispatcherContract::class);
 
         $this->activityService = new ActivityService(
             activityRepository: $this->activityRepository,
-            activityQuery: $this->createMock(ActivityQueryContract::class),
+            activityQuery: $this->activityQuery,
             activityResponseMapper: new ActivityResponseMapper(),
             transactionManager: $this->transactionManager,
             logger: $this->createMock(LoggerInterface::class),
             eventDispatcher: $this->eventDispatcher,
         );
+
+        // Both write paths read the saved row back through the query port to
+        // build the response, so every test needs that read stubbed.
+        $this->activityQuery->method('findById')
+            ->willReturn(new ActivityProjectionDTO(entity: $this->makeEntity()));
     }
 
     public function test_create_returns_success_result_with_response_dto(): void
@@ -206,9 +215,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_returns_success_result_with_response_dto(): void
     {
-        $locked = $this->makeEntity();
-        $this->activityRepository->method('findByIdWithLock')->willReturn($locked);
-        $this->activityRepository->method('save')->willReturn($locked);
+        $this->willLock($this->makeEntity());
 
         $result = $this->activityService->update(
             new ActivityUpdateDTO(id: 1, subject: 'Updated subject')
@@ -234,7 +241,7 @@ final class ActivityServiceTest extends TestCase
     public function test_update_mutates_the_locked_entity_and_persists_it(): void
     {
         $locked = $this->makeEntity();
-        $this->activityRepository->method('findByIdWithLock')->willReturn($locked);
+        $this->willLock($locked);
 
         $captured = null;
         $this->activityRepository->expects($this->once())
@@ -263,7 +270,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_leaves_unsupplied_fields_unchanged(): void
     {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
+        $this->willLock($this->makeEntity());
 
         $captured = null;
         $this->activityRepository->method('save')
@@ -285,7 +292,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_completes_the_activity_when_a_completed_at_is_supplied(): void
     {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
+        $this->willLock($this->makeEntity());
 
         $captured = null;
         $this->activityRepository->method('save')
@@ -310,7 +317,7 @@ final class ActivityServiceTest extends TestCase
         $locked = $this->makeEntity();
         $locked->markCompleted(new \DateTimeImmutable('2026-10-02 11:00:00'));
 
-        $this->activityRepository->method('findByIdWithLock')->willReturn($locked);
+        $this->willLock($locked);
 
         $captured = null;
         $this->activityRepository->method('save')
@@ -328,7 +335,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_returns_failure_when_the_completion_time_lies_in_the_future(): void
     {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
+        $this->willLock($this->makeEntity());
 
         $this->transactionManager->expects($this->once())->method('rollback');
         $this->activityRepository->expects($this->never())->method('save');
@@ -360,8 +367,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_commits_the_transaction_on_success(): void
     {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
-        $this->activityRepository->method('save')->willReturn($this->makeEntity());
+        $this->willLock($this->makeEntity());
 
         $this->transactionManager->expects($this->once())->method('beginTransaction');
         $this->transactionManager->expects($this->once())->method('commit');
@@ -374,7 +380,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_rolls_back_and_returns_failure_when_repository_throws(): void
     {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
+        $this->willLock($this->makeEntity());
         $this->activityRepository->method('save')
             ->willThrowException(new RuntimeException('Database is down.'));
 
@@ -391,7 +397,7 @@ final class ActivityServiceTest extends TestCase
 
     public function test_update_returns_failure_when_an_empty_subject_breaks_the_invariant(): void
     {
-        $this->activityRepository->method('findByIdWithLock')->willReturn($this->makeEntity());
+        $this->willLock($this->makeEntity());
 
         $this->transactionManager->expects($this->once())->method('rollback');
         $this->activityRepository->expects($this->never())->method('save');
@@ -520,6 +526,25 @@ final class ActivityServiceTest extends TestCase
         $this->eventDispatcher->expects($this->never())->method('dispatch');
 
         $this->activityService->deleteActivity(1);
+    }
+
+    /**
+     * Stubs the repository's locked read and save, which the update path uses.
+     * The read-back through the query port is stubbed in setUp().
+     *
+     * @param ActivityEntity|null $entity Null means the row does not exist.
+     */
+    private function willLock(?ActivityEntity $entity): void
+    {
+        $this->activityRepository->method('save')->willReturn($this->makeEntity());
+
+        if ($entity === null) {
+            $this->activityRepository->method('findByIdWithLock')->willReturn(null);
+
+            return;
+        }
+
+        $this->activityRepository->method('findByIdWithLock')->willReturn($entity);
     }
 
     private function makeCreateDTO(

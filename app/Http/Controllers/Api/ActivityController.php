@@ -5,11 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Activity\StoreActivityRequest;
 use Core\Activity\Application\Contracts\ActivityMapperContract;
-use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\Services\ActivityService;
-use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 
 class ActivityController extends Controller
@@ -27,14 +26,8 @@ class ActivityController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $filterDTO = ActivityFilterDTO::fromRequest(
-                status: $request->input('status'),
-                type: $request->input('type'),
-                userId: $request->filled('user_id') ? $request->integer('user_id') : null,
-                filter: $request->input('filter'),
-                perPage: $request->input('per_page', 15),
-            );
-        } catch (InvalidActivityException $exception) {
+            $filterDTO = $this->mapper->mapToFilterDTO($request->query());
+        } catch (InvalidArgumentException $exception) {
             return response()->json([
                 'status'  => 'error',
                 'message' => $exception->getMessage(),
@@ -49,7 +42,7 @@ class ActivityController extends Controller
                 'status'  => 'error',
                 'message' => $result->message,
                 'error_code' => $result->errorCode ?? 'ACTIVITY_FETCH_FAILED'
-            ], Response::HTTP_BAD_REQUEST);
+            ], $this->errorStatus($result->errorCode));
         }
 
         return response()->json([

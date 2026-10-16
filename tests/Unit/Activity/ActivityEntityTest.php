@@ -127,11 +127,11 @@ final class ActivityEntityTest extends TestCase
         );
     }
 
-    public function test_update_details_applies_every_supplied_field(): void
+    public function test_apply_changes_applies_every_supplied_field(): void
     {
         $entity = $this->makeEntity();
 
-        $entity->updateDetails(
+        $entity->applyChanges(
             subject: 'New subject',
             type: ActivityType::MEETING,
             description: 'New description',
@@ -144,11 +144,11 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('2026-12-01 10:00:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
     }
 
-    public function test_update_details_leaves_null_arguments_unchanged(): void
+    public function test_apply_changes_leaves_null_arguments_unchanged(): void
     {
         $entity = $this->makeEntity();
 
-        $entity->updateDetails(subject: 'Only subject');
+        $entity->applyChanges(subject: 'Only subject');
 
         $this->assertSame('Only subject', $entity->getSubject());
         $this->assertSame(ActivityType::CALL, $entity->getType());
@@ -156,31 +156,31 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('2026-10-05 09:30:00', $entity->getDueDate()?->format('Y-m-d H:i:s'));
     }
 
-    public function test_update_details_rejects_an_empty_subject(): void
+    public function test_apply_changes_rejects_an_empty_subject(): void
     {
         $entity = $this->makeEntity();
 
         $this->expectException(InvalidActivityException::class);
         $this->expectExceptionMessage('An activity must carry a subject.');
 
-        $entity->updateDetails(subject: '');
+        $entity->applyChanges(subject: '');
     }
 
-    public function test_update_details_rejects_a_whitespace_only_subject(): void
+    public function test_apply_changes_rejects_a_whitespace_only_subject(): void
     {
         $entity = $this->makeEntity();
 
         $this->expectException(InvalidActivityException::class);
 
-        $entity->updateDetails(subject: '   ');
+        $entity->applyChanges(subject: '   ');
     }
 
-    public function test_update_details_keeps_the_subject_when_the_rejected_update_is_caught(): void
+    public function test_apply_changes_keeps_the_subject_when_the_rejected_update_is_caught(): void
     {
         $entity = $this->makeEntity();
 
         try {
-            $entity->updateDetails(subject: '');
+            $entity->applyChanges(subject: '');
         } catch (InvalidActivityException) {
             // The entity is left exactly as it was.
         }
@@ -188,11 +188,11 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('Discovery call', $entity->getSubject());
     }
 
-    public function test_update_details_never_touches_the_tracked_record(): void
+    public function test_apply_changes_never_touches_the_tracked_record(): void
     {
         $entity = $this->makeEntity();
 
-        $entity->updateDetails(subject: 'New subject', type: ActivityType::EMAIL);
+        $entity->applyChanges(subject: 'New subject', type: ActivityType::EMAIL);
 
         $this->assertSame('App\\Models\\Lead', $entity->getTrackableType()->toString());
         $this->assertSame(42, $entity->getTrackableId());

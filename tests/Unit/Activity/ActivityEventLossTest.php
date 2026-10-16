@@ -184,19 +184,15 @@ final class ActivityEventLossTest extends TestCase
                     $entity->recordDeleted();
                 }
 
-                // The service mutates this exact instance, so holding onto it
-                // is how the test observes the event buffer during the commit.
+                // The update and delete paths both read through here, and the
+                // test inspects this instance to see whether it was drained
+                // before the commit.
                 $this->entityAtCommit = $entity;
 
                 return $entity;
             }
 
             public function delete(ActivityEntity $activity): void {}
-
-            public function paginate(int $perPage = 10): \Core\Shared\Domain\DataObjects\PaginatedResult
-            {
-                return new \Core\Shared\Domain\DataObjects\PaginatedResult([], 0, 1, $perPage, 1);
-            }
 
             public function getFilteredActivities(
                 \Core\Activity\Domain\ValueObjects\ActivityFilter $filter
@@ -206,7 +202,10 @@ final class ActivityEventLossTest extends TestCase
 
             public function findById(int $id): ?\Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO
             {
-                return null;
+                // The write paths read the saved row back to build the response.
+                return new \Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO(
+                    entity: $this->hydrated(id: $id),
+                );
             }
 
             private function hydrated(int $id = 7): ActivityEntity
