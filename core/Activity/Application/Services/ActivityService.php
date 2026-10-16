@@ -209,12 +209,17 @@ final class ActivityService
         } catch (InvalidActivityException $exception) {
             $this->transactionManager->rollback();
 
+            // The lock read cached a row that this rollback has invalidated.
+            $this->activityRepository->clearLockedRecord($activityUpdateDTO->id);
+
             return Result::failure(
                 message: $exception->getMessage(),
                 errorCode: self::ERROR_INVALID,
             );
         } catch (\Throwable $exception) {
             $this->transactionManager->rollback();
+
+            $this->activityRepository->clearLockedRecord($activityUpdateDTO->id);
 
             $this->logger->error('Activity update failed.', [
                 'id' => $activityUpdateDTO->id,
@@ -276,6 +281,9 @@ final class ActivityService
             $this->transactionManager->commit();
         } catch (\Throwable $exception) {
             $this->transactionManager->rollback();
+
+            // The lock read cached a row that this rollback has invalidated.
+            $this->activityRepository->clearLockedRecord($id);
 
             $this->logger->error('Activity deletion failed.', [
                 'id' => $id,

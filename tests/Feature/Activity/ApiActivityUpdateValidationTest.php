@@ -131,6 +131,8 @@ final class ApiActivityUpdateValidationTest extends TestCase
             }
 
             public function delete(ActivityEntity $activity): void {}
+
+            public function clearLockedRecord(int $id): void {}
         });
     }
 

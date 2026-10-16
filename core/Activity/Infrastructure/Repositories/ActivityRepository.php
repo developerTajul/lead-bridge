@@ -208,7 +208,8 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     }
 
     /**
-     * Deletes an activity.
+     * Deletes an activity. The locked row is dropped either way: a delete has
+     * no further use for it, and a failed one must not leave it cached.
      *
      * @param ActivityEntity $activity
      *
@@ -218,12 +219,35 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
      */
     public function delete(ActivityEntity $activity): void
     {
-        if (! $this->deleteRecord((int) $activity->getId())) {
+        $id = (int) $activity->getId();
+
+        try {
+            $deleted = $this->deleteRecord($id);
+        } finally {
+            unset($this->lockedModels[$id]);
+        }
+
+        if (! $deleted) {
             throw new RuntimeException(sprintf(
                 'Activity with ID %d could not be deleted.',
-                (int) $activity->getId(),
+                $id,
             ));
         }
+    }
+
+    /**
+     * Drops the row a lock read is holding. A write that never reaches save()
+     * leaves its row cached, so a long-lived process would keep it alive and a
+     * later save() for that ID would write back a model read before the
+     * rollback.
+     *
+     * @param int $id
+     *
+     * @return void
+     */
+    public function clearLockedRecord(int $id): void
+    {
+        unset($this->lockedModels[$id]);
     }
 
     /**

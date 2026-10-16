@@ -194,6 +194,8 @@ final class ActivityEventLossTest extends TestCase
 
             public function delete(ActivityEntity $activity): void {}
 
+            public function clearLockedRecord(int $id): void {}
+
             public function getFilteredActivities(
                 \Core\Activity\Domain\ValueObjects\ActivityFilter $filter
             ): \Core\Shared\Domain\DataObjects\PaginatedResult {

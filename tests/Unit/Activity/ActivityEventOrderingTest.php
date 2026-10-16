@@ -97,6 +97,8 @@ final class ActivityEventOrderingTest extends TestCase
 
             public function delete(ActivityEntity $activity): void {}
 
+            public function clearLockedRecord(int $id): void {}
+
             private function makeEntity(): ActivityEntity
             {
                 return ActivityEntity::reconstitute(

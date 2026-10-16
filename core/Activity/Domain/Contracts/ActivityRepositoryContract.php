@@ -40,4 +40,15 @@ interface ActivityRepositoryContract
      * @return void
      */
     public function delete(ActivityEntity $activity): void;
+
+    /**
+     * Drops the row held from a lock read, for a write that never reaches
+     * save(). Called once the transaction has ended, so a rolled-back read
+     * cannot be written back later.
+     *
+     * @param int $id
+     *
+     * @return void
+     */
+    public function clearLockedRecord(int $id): void;
 }

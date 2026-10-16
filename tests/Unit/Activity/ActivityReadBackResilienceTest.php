@@ -229,6 +229,8 @@ final class ActivityReadBackResilienceTest extends TestCase
 
             public function delete(ActivityEntity $activity): void {}
 
+            public function clearLockedRecord(int $id): void {}
+
             public function getFilteredActivities(ActivityFilter $filter): PaginatedResult
             {
                 return new PaginatedResult([], 0, 1, $filter->perPage, 1);
