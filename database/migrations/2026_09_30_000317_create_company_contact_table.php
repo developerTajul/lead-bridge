@@ -19,7 +19,6 @@ return new class extends Migration
             $table->boolean('is_primary')->default(false);
             $table->timestamps();
 
-            // একই ব্যক্তি একই কোম্পানিতে যেন একাধিকবার ডুপ্লিকেট না হন
             $table->unique(['company_id', 'contact_id']);
         });
     }

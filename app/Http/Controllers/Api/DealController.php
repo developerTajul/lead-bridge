@@ -104,7 +104,7 @@ final class DealController extends Controller
             'actual_close_date'   => ['nullable', 'date'],
         ]);
 
-        // Closed Won (ID: 5) বা Closed Lost (ID: 6) স্টেজে গেলে actual_close_date অটো সেট করা
+        // Won (5) and Lost (6) stages close the deal, so stamp the close date.
         if (isset($validated['deal_stage_id']) && in_array((int) $validated['deal_stage_id'], [5, 6], true)) {
             $validated['actual_close_date'] = $validated['actual_close_date'] ?? now()->toDateString();
         }

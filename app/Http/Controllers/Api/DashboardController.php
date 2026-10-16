@@ -18,7 +18,6 @@ final class DashboardController extends Controller
      */
     public function metrics(): JsonResponse
     {
-        // ১. ডিল ও রেভিনিউ মেট্রিক্স
         $totalDeals = Deal::count();
         $wonDealsCount = Deal::where('deal_stage_id', 5)->count();
         $lostDealsCount = Deal::where('deal_stage_id', 6)->count();
@@ -27,14 +26,12 @@ final class DashboardController extends Controller
         $totalWonRevenue = (float) Deal::where('deal_stage_id', 5)->sum('amount');
         $openPipelineValue = (float) Deal::whereNotIn('deal_stage_id', [5, 6])->sum('amount');
 
-        // ২. লিড ও কনভার্সন মেট্রিক্স
         $totalLeads = Lead::count();
         $convertedLeads = Lead::where('status', 'converted')->count();
         $conversionRate = $totalLeads > 0 
             ? round(($convertedLeads / $totalLeads) * 100, 2) 
             : 0.0;
 
-        // ৩. অ্যাক্টিভিটি মেট্রিক্স
         $pendingActivitiesCount = Activity::whereNull('completed_at')->count();
         $completedActivitiesCount = Activity::whereNotNull('completed_at')->count();
 

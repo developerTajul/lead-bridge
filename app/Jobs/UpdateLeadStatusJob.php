@@ -20,7 +20,6 @@ class UpdateLeadStatusJob implements ShouldQueue
 
     public function handle(): void
     {
-        // ব্যাকগ্রাউন্ডে লিডের স্ট্যাটাস আপডেট করা হচ্ছে
         Lead::where('id', $this->dto->leadId)
             ->where('status', 'new')
             ->update(['status' => $this->dto->status]);

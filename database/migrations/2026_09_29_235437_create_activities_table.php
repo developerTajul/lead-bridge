@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('activities', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
-            $table->morphs('trackable'); // এটি trackable_type এবং trackable_id তৈরি করবে
+            $table->morphs('trackable');
             $table->string('type', 50)->index(); // call, meeting, email, task
             $table->string('subject');
             $table->text('description')->nullable();

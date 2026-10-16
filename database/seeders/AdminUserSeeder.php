@@ -21,7 +21,7 @@ class AdminUserSeeder extends Seeder
             ],
             [
                 'name'              => 'Admin',
-                'password'          => Hash::make('Admin@123456'), // স্ট্রং ডিফল্ট পাসওয়ার্ড
+                'password'          => Hash::make('Admin@123456'),
                 'role'              => AuthRole::ADMIN->value,
                 'status'            => AuthStatus::APPROVED->value,
                 'image'             => null,

@@ -10,7 +10,7 @@ readonly class ActivityFilterDTO
         public ?string $status = null,
         public ?string $type = null,
         public ?int $userId = null,
-        public ?string $filter = null, // today, overdue ইত্যাদি
+        public ?string $filter = null,
         public int $perPage = 15
     ) {}
 }

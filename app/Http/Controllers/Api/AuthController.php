@@ -64,15 +64,13 @@ class AuthController extends Controller
         /** @var \Core\Auth\Application\DTOs\Responses\AuthResponseDTO $dto */
         $dto = $result->getData();
 
-        // ১. ডাটাবেজ কোয়েরি ছাড়া মেমোরিতে মডেল অবজেক্ট প্রস্তুত করা
+        // In-memory user model so Sanctum can mint a token without a DB round trip.
         $user = new UserModel();
         $user->id = $dto->id;
-        $user->exists = true; // Sanctum-কে জানানো হচ্ছে রেকর্ডটি DB-তে বিদ্যমান
+        $user->exists = true;
 
-        // ২. Sanctum টোকেন জেনারেট করা
         $token = $user->createToken('auth-token')->plainTextToken;
 
-        // ৩. টোকেন ও DTO রেসপন্স আকারে পাঠানো
         return response()->json([
             'status'  => 'success',
             'message' => $result->getMessage(),

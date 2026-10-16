@@ -42,17 +42,13 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
     }
 
 
-    // ইমেইল দিয়ে খোঁজা
     public function findByEmail(string $email): ?LeadEntity
     {
-        // Eloquent মডেল ব্যবহার করে ডেটা খোঁজা
         $leadModel = $this->model->where('email', $email)->first();
 
-        // যদি মডেল পাওয়া যায়, তবে তাকে এনটিটিতে ম্যাপ করা, নাহলে null
         return $leadModel ? $this->mapper->toEntity($leadModel->toArray()) : null;
     }
 
-    // ফোন দিয়ে খোঁজা
     public function findByPhone(string $phone): ?LeadEntity
     {
         $leadModel = $this->model->where('phone', $phone)->first();

@@ -44,7 +44,7 @@ final class Activity extends Model
     }
 
     /**
-     * যে ইউজার অ্যাক্টিভিটি তৈরি করেছে তার রিলেশন
+     * Relation to the user who created the activity.
      */
     public function user(): BelongsTo
     {
@@ -52,7 +52,7 @@ final class Activity extends Model
     }
 
     /**
-     * পলিমর্ফিক রিলেশন (Lead, Deal, Company ইত্যাদি)
+     * Polymorphic relation to the tracked model (Lead, Deal, Company, etc.).
      */
     public function trackable(): MorphTo
     {

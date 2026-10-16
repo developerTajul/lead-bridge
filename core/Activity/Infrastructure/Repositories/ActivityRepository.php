@@ -93,24 +93,20 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     {
         $query = Activity::with(['user', 'trackable']);
 
-        // ১. স্ট্যাটাস ফিল্টার
         if ($filter->status === 'pending') {
             $query->whereNull('completed_at');
         } elseif ($filter->status === 'completed') {
             $query->whereNotNull('completed_at');
         }
 
-        // ২. টাইপ ফিল্টার
         if ($filter->type !== null) {
             $query->where('type', $filter->type);
         }
 
-        // ৩. ইউজার ফিল্টার
         if ($filter->userId !== null) {
             $query->where('user_id', $filter->userId);
         }
 
-        // ৪. সময়ভিত্তিক ফিল্টার
         if ($filter->period === 'today') {
             $query->whereDate('due_date', now()->toDateString());
         } elseif ($filter->period === 'overdue') {
@@ -119,16 +115,13 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
                   ->where('due_date', '<', now());
         }
 
-        // ৫. লারাভেলের পেজিনেটর থেকে ডেটা আনা
         $eloquentPaginator = $query->orderBy('due_date', 'asc')->paginate($filter->perPage);
 
-        // ৬. ডাটাবেসের মডেলগুলোকে রিড মডেলে রূপান্তর করা
         $entities = $eloquentPaginator
             ->getCollection()
             ->map(fn(Activity $item) => $this->mapper->toProjection($item->toArray()))
             ->all();
 
-        // ৭. আপনার ডোমেইনের নিজস্ব PaginatedResult রিটার্ন করা
         return new PaginatedResult(
             items: $entities,
             total: $eloquentPaginator->total(),

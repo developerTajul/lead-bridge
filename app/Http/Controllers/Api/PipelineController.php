@@ -42,13 +42,11 @@ final class PipelineController extends Controller
         ]);
 
         $pipeline = DB::transaction(function () use ($validated): Pipeline {
-            // ১. পাইপলাইন তৈরি
             $newPipeline = Pipeline::create([
                 'name'       => $validated['name'],
                 'is_default' => $validated['is_default'] ?? false,
             ]);
 
-            // ২. স্টেজের তালিকা পাইপলাইনের আন্ডারে ইনসার্ট
             $newPipeline->stages()->createMany($validated['stages']);
 
             return $newPipeline;
@@ -90,7 +88,6 @@ final class PipelineController extends Controller
             }
         ]);
 
-        // প্রতিটি স্টেজের সামারি (deals count এবং total value) তৈরি করা
         $board = $pipeline->stages->map(function ($stage) {
             return [
                 'id'             => $stage->id,

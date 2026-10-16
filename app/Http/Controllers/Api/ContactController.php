@@ -47,22 +47,18 @@ final class ContactController extends Controller
             'name'        => ['required', 'string', 'max:255'],
             'email'       => ['required', 'string', 'email', 'max:255', 'unique:contacts,email'],
             'phone'       => ['nullable', 'string', 'max:50'],
-            
-            // পিভট অ্যাসাইনমেন্টের জন্য অপশনাল ফিল্ডসমূহ
             'company_id'  => ['nullable', 'integer', 'exists:companies,id'],
             'job_title'   => ['nullable', 'string', 'max:255'],
             'is_primary'  => ['nullable', 'boolean'],
         ]);
 
         $contact = DB::transaction(function () use ($validated): Contact {
-            // ১. কন্টাক্ট তৈরি
             $newContact = Contact::create([
                 'name'  => $validated['name'],
                 'email' => $validated['email'],
                 'phone' => $validated['phone'] ?? null,
             ]);
 
-            // ২. যদি কোম্পানি আইডি পাঠানো হয়, তবে পিভট টেবিলে লিঙ্ক করা
             if (! empty($validated['company_id'])) {
                 $newContact->companies()->attach($validated['company_id'], [
                     'job_title'  => $validated['job_title'] ?? null,
@@ -104,7 +100,6 @@ final class ContactController extends Controller
         ]);
 
         $updatedContact = DB::transaction(function () use ($contact, $validated): Contact {
-            // কনকারেন্সি নিয়ন্ত্রণের জন্য লক
             $record = Contact::where('id', $contact->id)->lockForUpdate()->firstOrFail();
             $record->update($validated);
 

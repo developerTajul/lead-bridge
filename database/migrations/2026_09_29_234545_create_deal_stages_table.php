@@ -19,7 +19,6 @@ return new class extends Migration
             $table->unsignedTinyInteger('probability')->default(0); // 0 to 100
             $table->timestamps();
 
-            // একই পাইপলাইনে যেন একই ধাপের নাম ডুপ্লিকেট না হয়
             $table->unique(['pipeline_id', 'name']);
         });
     }

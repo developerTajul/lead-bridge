@@ -23,7 +23,6 @@ final class LeadConversionController extends Controller
      */
     public function convert(Request $request, Lead $lead): JsonResponse
     {
-        // ১. চেক করা লিডটি ইতোমধ্যে কনভার্ট হয়েছে কি না
         if ($lead->conversion()->exists()) {
             return response()->json([
                 'status'  => 'error',
@@ -31,7 +30,6 @@ final class LeadConversionController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // ২. অতিরিক্ত প্যারামিটার অপশনাল রাখা (যেমন ডিল অ্যামাউন্ট বা নির্দিষ্ট পাইপলাইন)
         $validated = $request->validate([
             'deal_title'          => ['nullable', 'string', 'max:255'],
             'amount'              => ['nullable', 'numeric', 'min:0'],
@@ -43,10 +41,9 @@ final class LeadConversionController extends Controller
         ]);
 
         $result = DB::transaction(function () use ($lead, $validated) {
-            // রো-লকিং যাতে কনকারেন্ট ডুপ্লিকেট কনভার্সন না ঘটে
+            // Row lock so concurrent requests cannot convert the same lead twice.
             $lockedLead = Lead::where('id', $lead->id)->lockForUpdate()->firstOrFail();
 
-            // ক. কোম্পানি হ্যান্ডলিং (যদি লিডে কোম্পানির নাম থাকে)
             $company = null;
             if (!empty($lockedLead->company_name)) {
                 $company = Company::firstOrCreate(
@@ -55,7 +52,6 @@ final class LeadConversionController extends Controller
                 );
             }
 
-            // খ. কন্টাক্ট তৈরি
             $contact = Contact::firstOrCreate(
                 ['email' => $lockedLead->email],
                 [
@@ -64,7 +60,6 @@ final class LeadConversionController extends Controller
                 ]
             );
 
-            // গ. কোম্পানির সাথে কন্টাক্ট লিংক (Pivot)
             if ($company) {
                 $company->contacts()->syncWithoutDetaching([
                     $contact->id => [
@@ -74,7 +69,6 @@ final class LeadConversionController extends Controller
                 ]);
             }
 
-            // ঘ. পাইপলাইন ও স্টেজ নির্বাচন (না দিলে ডিফল্ট পাইপলাইনের ১ম স্টেজ নেওয়া হবে)
             $pipelineId = $validated['pipeline_id'] ?? null;
             $stageId    = $validated['deal_stage_id'] ?? null;
 
@@ -85,7 +79,6 @@ final class LeadConversionController extends Controller
                 $stageId    = $stageId ?? $defaultPipeline?->stages->first()?->id;
             }
 
-            // ঙ. ডিল তৈরি (যদি পাইপলাইন পাওয়া যায়)
             $deal = null;
             if ($pipelineId && $stageId) {
                 $deal = Deal::create([
@@ -100,10 +93,8 @@ final class LeadConversionController extends Controller
                 ]);
             }
 
-            // চ. লিড স্ট্যাটাস আপডেট
             $lockedLead->update(['status' => 'converted']);
 
-            // ছ. lead_conversions টেবিলে লগ তৈরি
             $conversion = LeadConversion::create([
                 'lead_id'      => $lockedLead->id,
                 'contact_id'   => $contact->id,

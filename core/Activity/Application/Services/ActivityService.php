@@ -90,7 +90,6 @@ final class ActivityService
     public function getActivities(ActivityFilterDTO $filterDTO): Result
     {
         try {
-            // ১. Application DTO থেকে Domain criteria বানানো
             $activityFilter = new ActivityFilter(
                 status: $filterDTO->status,
                 type: $filterDTO->type,
@@ -99,10 +98,8 @@ final class ActivityService
                 perPage: $filterDTO->perPage
             );
 
-            // ২. রিপোজিটরি থেকে ডাটা নিয়ে আসা (এর items এর ভেতরে read model আছে)
             $paginatedActivities = $this->activityRepository->getFilteredActivities($activityFilter);
 
-            // ৩. ভেতরের read model গুলোকে ActivityResponseDTO তে রূপান্তর করা
             $mappedPaginatedResult = $paginatedActivities->map(
                 fn(ActivityProjectionDTO $projection) => $this->activityResponseMapper->toResponseDTO($projection)
             );
@@ -124,12 +121,10 @@ final class ActivityService
         try {
             $activityProjection = $this->activityRepository->findById($id);
 
-            // যদি ডেটা না পাওয়া যায়
             if (! $activityProjection) {
                 return Result::failure('Activity not found.', 'ACTIVITY_NOT_FOUND');
             }
 
-            // ডেটা পাওয়া গেলে রেসপন্স ম্যাপার দিয়ে DTO-তে কনভার্ট করা
             $activityResponseDTO = $this->activityResponseMapper->toResponseDTO($activityProjection);
 
             return Result::success(

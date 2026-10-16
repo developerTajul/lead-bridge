@@ -20,7 +20,6 @@ final class CompanyController extends Controller
     {
         $query = Company::query();
 
-        // সহজ সার্চ ফিল্টার (নাম বা ইন্ডাস্ট্রি অনুযায়ী)
         if ($request->filled('search')) {
             $search = (string) $request->input('search');
             $query->where(function ($q) use ($search) {
