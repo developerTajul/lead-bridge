@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace Core\Activity\Domain\Contracts;
 
-use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Entities\ActivityEntity;
-use Core\Activity\Domain\ValueObjects\ActivityFilter;
-use Core\Shared\Domain\DataObjects\PaginatedResult;
 
 /**
- * PORT: the Application layer depends on THIS, never on Eloquent.
+ * Write side of the activity persistence port. Read operations live in
+ * Core\Activity\Application\Contracts\ActivityQueryContract, which returns
+ * Application read models.
  */
 interface ActivityRepositoryContract
 {
@@ -23,33 +22,6 @@ interface ActivityRepositoryContract
      * @return ActivityEntity
      */
     public function save(ActivityEntity $activity): ActivityEntity;
-
-    /**
-     * Returns a paginated list of activities.
-     *
-     * @param int $perPage Items per page (default: 10).
-     *
-     * @return PaginatedResult Items are ActivityProjectionDTO instances.
-     */
-    public function paginate(int $perPage = 10): PaginatedResult;
-
-    /**
-     * Returns the activities matching the given filter criteria.
-     *
-     * @param ActivityFilter $filter
-     *
-     * @return PaginatedResult Items are ActivityProjectionDTO instances.
-     */
-    public function getFilteredActivities(ActivityFilter $filter): PaginatedResult;
-
-    /**
-     * Finds an activity by its ID, with its relations loaded.
-     *
-     * @param int $id
-     *
-     * @return ActivityProjectionDTO|null
-     */
-    public function findById(int $id): ?ActivityProjectionDTO;
 
     /**
      * Finds the entity by its ID with a row lock, for use inside a transaction.

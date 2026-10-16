@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Activity;
 
+use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
@@ -25,7 +26,7 @@ use RuntimeException;
  */
 final class ActivityIndexTest extends TestCase
 {
-    private ActivityRepositoryContract $activityRepository;
+    private ActivityQueryContract $activityRepository;
 
     private ActivityService $activityService;
 
@@ -33,10 +34,11 @@ final class ActivityIndexTest extends TestCase
     {
         parent::setUp();
 
-        $this->activityRepository = $this->createMock(ActivityRepositoryContract::class);
+        $this->activityRepository = $this->createMock(ActivityQueryContract::class);
 
         $this->activityService = new ActivityService(
-            activityRepository: $this->activityRepository,
+            activityRepository: $this->createMock(ActivityRepositoryContract::class),
+            activityQuery: $this->activityRepository,
             activityResponseMapper: new ActivityResponseMapper(),
             transactionManager: $this->createMock(TransactionManagerContract::class),
             logger: $this->createMock(LoggerInterface::class),

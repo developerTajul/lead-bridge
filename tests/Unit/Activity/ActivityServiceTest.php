@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Activity;
 
+use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityResponseDTO;
@@ -42,6 +43,7 @@ final class ActivityServiceTest extends TestCase
 
         $this->activityService = new ActivityService(
             activityRepository: $this->activityRepository,
+            activityQuery: $this->createMock(ActivityQueryContract::class),
             activityResponseMapper: new ActivityResponseMapper(),
             transactionManager: $this->transactionManager,
             logger: $this->createMock(LoggerInterface::class),
@@ -183,7 +185,9 @@ final class ActivityServiceTest extends TestCase
         $result = $this->activityService->create($this->makeCreateDTO(subject: ''));
 
         $this->assertTrue($result->isFailure());
-        $this->assertSame('ACTIVITY_CREATE_FAILED', $result->errorCode);
+        // A broken invariant is a validation failure, not a system error.
+        $this->assertSame('ACTIVITY_INVALID', $result->errorCode);
+        $this->assertSame('An activity must carry a subject.', $result->message);
     }
 
     public function test_create_does_not_dispatch_the_event_when_repository_throws(): void
@@ -335,7 +339,8 @@ final class ActivityServiceTest extends TestCase
         ));
 
         $this->assertTrue($result->isFailure());
-        $this->assertSame('ACTIVITY_UPDATE_FAILED', $result->errorCode);
+        $this->assertSame('ACTIVITY_INVALID', $result->errorCode);
+        $this->assertStringContainsString('cannot be completed in the future', $result->message);
     }
 
     public function test_update_returns_failure_when_activity_is_missing(): void
@@ -394,7 +399,8 @@ final class ActivityServiceTest extends TestCase
         $result = $this->activityService->update(new ActivityUpdateDTO(id: 1, subject: ''));
 
         $this->assertTrue($result->isFailure());
-        $this->assertSame('ACTIVITY_UPDATE_FAILED', $result->errorCode);
+        $this->assertSame('ACTIVITY_INVALID', $result->errorCode);
+        $this->assertSame('An activity must carry a subject.', $result->message);
     }
 
     // ---------------------------------------------------------------------

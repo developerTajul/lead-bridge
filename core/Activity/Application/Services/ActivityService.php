@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Core\Activity\Application\Services;
 
+use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityFilterDTO;
 use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
@@ -11,6 +12,7 @@ use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
+use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
@@ -22,8 +24,11 @@ use Psr\Log\LoggerInterface;
  */
 final class ActivityService
 {
+    private const ERROR_INVALID = 'ACTIVITY_INVALID';
+
     public function __construct(
         private readonly ActivityRepositoryContract $activityRepository,
+        private readonly ActivityQueryContract $activityQuery,
         private readonly ActivityResponseMapper $activityResponseMapper,
         private readonly TransactionManagerContract $transactionManager,
         private readonly LoggerInterface $logger,
@@ -62,6 +67,13 @@ final class ActivityService
             $savedEntity->recordCreated();
 
             $this->transactionManager->commit();
+        } catch (InvalidActivityException $exception) {
+            $this->transactionManager->rollback();
+
+            return Result::failure(
+                message: $exception->getMessage(),
+                errorCode: self::ERROR_INVALID,
+            );
         } catch (\Throwable $exception) {
             $this->transactionManager->rollback();
 
@@ -98,7 +110,7 @@ final class ActivityService
                 perPage: $filterDTO->perPage
             );
 
-            $paginatedActivities = $this->activityRepository->getFilteredActivities($activityFilter);
+            $paginatedActivities = $this->activityQuery->getFilteredActivities($activityFilter);
 
             $mappedPaginatedResult = $paginatedActivities->map(
                 fn(ActivityProjectionDTO $projection) => $this->activityResponseMapper->toResponseDTO($projection)
@@ -119,7 +131,7 @@ final class ActivityService
     public function getActivityById(int $id): Result
     {
         try {
-            $activityProjection = $this->activityRepository->findById($id);
+            $activityProjection = $this->activityQuery->findById($id);
 
             if (! $activityProjection) {
                 return Result::failure('Activity not found.', 'ACTIVITY_NOT_FOUND');
@@ -184,6 +196,13 @@ final class ActivityService
             return Result::success(
                 data: $activityResponseDTO,
                 message: 'Activity updated successfully.',
+            );
+        } catch (InvalidActivityException $exception) {
+            $this->transactionManager->rollback();
+
+            return Result::failure(
+                message: $exception->getMessage(),
+                errorCode: self::ERROR_INVALID,
             );
         } catch (\Throwable $exception) {
             $this->transactionManager->rollback();

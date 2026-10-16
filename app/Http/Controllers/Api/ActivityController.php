@@ -13,6 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ActivityController extends Controller
 {
+    private const ERROR_INVALID = 'ACTIVITY_INVALID';
+
     public function __construct(
         private readonly ActivityService $activityService,
         private readonly ActivityMapperContract $mapper
@@ -66,7 +68,7 @@ class ActivityController extends Controller
                 'status'  => 'error',
                 'message' => $result->message,
                 'error_code' => $result->errorCode,
-            ], Response::HTTP_BAD_REQUEST);
+            ], $this->errorStatus($result->errorCode));
         }
 
         return response()->json([
@@ -123,7 +125,7 @@ class ActivityController extends Controller
                 'status'  => 'error',
                 'message' => $result->message,
                 'error_code' => $result->errorCode,
-            ], Response::HTTP_BAD_REQUEST);
+            ], $this->errorStatus($result->errorCode));
         }
 
         return response()->json([
@@ -152,5 +154,22 @@ class ActivityController extends Controller
             'status'  => 'success',
             'message' => $result->message,
         ], Response::HTTP_OK);
+    }
+
+    /**
+     * Maps a domain error code to the HTTP status the client should see.
+     * A broken activity invariant is a validation failure, not a bad request.
+     *
+     * @param string|null $errorCode
+     *
+     * @return int
+     */
+    private function errorStatus(?string $errorCode): int
+    {
+        if ($errorCode === self::ERROR_INVALID) {
+            return Response::HTTP_UNPROCESSABLE_ENTITY;
+        }
+
+        return Response::HTTP_BAD_REQUEST;
     }
 }

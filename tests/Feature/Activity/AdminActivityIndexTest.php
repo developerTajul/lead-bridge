@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Activity;
 
 use App\Models\User;
+use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
-use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
@@ -133,7 +133,7 @@ final class AdminActivityIndexTest extends TestCase
 
     private function bindRecordingRepository(array $items = []): void
     {
-        $repository = new class($items, $this) implements ActivityRepositoryContract {
+        $repository = new class($items, $this) implements ActivityQueryContract {
             /**
              * @param array<int, ActivityEntity> $items
              */
@@ -141,11 +141,6 @@ final class AdminActivityIndexTest extends TestCase
                 private array $items,
                 private AdminActivityIndexTest $test,
             ) {}
-
-            public function save(ActivityEntity $activity): ActivityEntity
-            {
-                return $activity;
-            }
 
             public function paginate(int $perPage = 10): PaginatedResult
             {
@@ -174,16 +169,9 @@ final class AdminActivityIndexTest extends TestCase
             {
                 return null;
             }
-
-            public function findByIdWithLock(int $id): ?ActivityEntity
-            {
-                return null;
-            }
-
-            public function delete(ActivityEntity $activity): void {}
         };
 
-        $this->app->instance(ActivityRepositoryContract::class, $repository);
+        $this->app->instance(ActivityQueryContract::class, $repository);
     }
 
     /**

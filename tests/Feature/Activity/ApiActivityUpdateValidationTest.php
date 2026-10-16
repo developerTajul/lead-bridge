@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Activity;
 
-use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Enums\ActivityType;
-use Core\Activity\Domain\ValueObjects\ActivityFilter;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Illuminate\Foundation\Testing\WithoutMiddleware;
@@ -90,21 +88,6 @@ final class ApiActivityUpdateValidationTest extends TestCase
             public function save(ActivityEntity $activity): ActivityEntity
             {
                 return $activity;
-            }
-
-            public function paginate(int $perPage = 10): PaginatedResult
-            {
-                return new PaginatedResult([], 0, 1, $perPage, 1);
-            }
-
-            public function getFilteredActivities(ActivityFilter $filter): PaginatedResult
-            {
-                return new PaginatedResult([], 0, 1, $filter->perPage, 1);
-            }
-
-            public function findById(int $id): ?ActivityProjectionDTO
-            {
-                return null;
             }
 
             public function findByIdWithLock(int $id): ?ActivityEntity

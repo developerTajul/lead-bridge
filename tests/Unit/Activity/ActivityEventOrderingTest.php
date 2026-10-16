@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Activity;
 
+use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Requests\ActivityCreateDTO;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Application\Mappers\ActivityResponseMapper;
@@ -67,7 +68,7 @@ final class ActivityEventOrderingTest extends TestCase
 
     private function makeService(bool $listenerThrows = false): ActivityService
     {
-        $repository = new class($this->log) implements ActivityRepositoryContract {
+        $repository = new class($this->log) implements ActivityRepositoryContract, ActivityQueryContract {
             /** @param array<int, string> $log */
             public function __construct(private array &$log) {}
 
@@ -152,6 +153,7 @@ final class ActivityEventOrderingTest extends TestCase
 
         return new ActivityService(
             activityRepository: $repository,
+            activityQuery: $repository,
             activityResponseMapper: new ActivityResponseMapper(),
             transactionManager: $transactionManager,
             logger: $this->createMock(LoggerInterface::class),

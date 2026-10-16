@@ -45,7 +45,7 @@ final class ActivityEntity
      *
      * @return self
      *
-     * @throws InvalidActivityException When the subject or the tracked record is missing.
+     * @throws InvalidActivityException When the subject, the tracked record or the completion time is invalid.
      */
     public static function createNew(
         string $trackableType,
@@ -64,6 +64,10 @@ final class ActivityEntity
 
         if ($trackableId <= 0) {
             throw InvalidActivityException::invalidTrackableId($trackableId);
+        }
+
+        if ($completedAt !== null) {
+            self::assertCompletable($completedAt);
         }
 
         return new self(
@@ -268,13 +272,29 @@ final class ActivityEntity
             throw InvalidActivityException::alreadyCompleted();
         }
 
+        self::assertCompletable($completedAt, $now);
+
+        $this->completedAt = $completedAt;
+    }
+
+    /**
+     * Guards the completion invariant: an activity cannot be completed at a
+     * moment that lies ahead of now.
+     *
+     * @param DateTimeImmutable      $completedAt
+     * @param DateTimeImmutable|null $now Clock to compare against; defaults to the current time.
+     *
+     * @return void
+     *
+     * @throws InvalidActivityException When the moment lies ahead.
+     */
+    private static function assertCompletable(DateTimeImmutable $completedAt, ?DateTimeImmutable $now = null): void
+    {
         $now ??= new DateTimeImmutable();
 
         if ($completedAt > $now) {
             throw InvalidActivityException::completionInTheFuture($completedAt, $now);
         }
-
-        $this->completedAt = $completedAt;
     }
 
     /**

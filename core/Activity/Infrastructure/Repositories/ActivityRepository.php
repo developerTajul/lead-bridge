@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Core\Activity\Infrastructure\Repositories;
 
 use App\Models\Activity;
+use Core\Activity\Application\Contracts\ActivityQueryContract;
 use Core\Activity\Application\DTOs\Responses\ActivityProjectionDTO;
 use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
@@ -19,8 +20,9 @@ use RuntimeException;
  * where Laravel/Eloquent is used; results are mapped to Domain Entities first.
  *
  * @implements \Core\Activity\Domain\Contracts\ActivityRepositoryContract
+ * @implements \Core\Activity\Application\Contracts\ActivityQueryContract
  */
-final class ActivityRepository extends BaseRepository implements ActivityRepositoryContract
+final class ActivityRepository extends BaseRepository implements ActivityRepositoryContract, ActivityQueryContract
 {
     /**
      * @param Activity             $model
@@ -184,7 +186,7 @@ final class ActivityRepository extends BaseRepository implements ActivityReposit
     {
         return [
             'user_id' => $activity->getUserId(),
-            'trackable_type' => $activity->getTrackableType(),
+            'trackable_type' => $activity->getTrackableType()->toString(),
             'trackable_id' => $activity->getTrackableId(),
             'type' => $activity->getType()->value,
             'subject' => $activity->getSubject(),

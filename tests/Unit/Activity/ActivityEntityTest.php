@@ -46,6 +46,36 @@ final class ActivityEntityTest extends TestCase
         $this->assertSame('2026-10-04 08:15:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
     }
 
+    public function test_create_new_rejects_a_future_completion_time(): void
+    {
+        $this->expectException(InvalidActivityException::class);
+        $this->expectExceptionMessage('An activity cannot be completed in the future');
+
+        ActivityEntity::createNew(
+            trackableType: 'App\\Models\\Lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+            userId: 7,
+            completedAt: new \DateTimeImmutable('2099-01-01 00:00:00'),
+        );
+    }
+
+    public function test_create_new_accepts_a_completion_time_in_the_past(): void
+    {
+        $entity = ActivityEntity::createNew(
+            trackableType: 'App\\Models\\Lead',
+            trackableId: 42,
+            type: ActivityType::CALL,
+            subject: 'Discovery call',
+            userId: 7,
+            completedAt: new \DateTimeImmutable('2026-10-04 08:15:00'),
+        );
+
+        $this->assertFalse($entity->isPending());
+        $this->assertSame('2026-10-04 08:15:00', $entity->getCompletedAt()?->format('Y-m-d H:i:s'));
+    }
+
     public function test_create_new_rejects_an_empty_subject(): void
     {
         $this->expectException(InvalidActivityException::class);
