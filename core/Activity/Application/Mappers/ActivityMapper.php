@@ -11,6 +11,8 @@ use Core\Activity\Application\DTOs\Requests\ActivityUpdateDTO;
 use Core\Activity\Domain\Enums\ActivityPeriod;
 use Core\Activity\Domain\Enums\ActivityStatus;
 use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\ValueObjects\ActivityFilter;
+use Core\Activity\Domain\ValueObjects\TrackableType;
 use DateTimeImmutable;
 use InvalidArgumentException;
 
@@ -22,6 +24,8 @@ use InvalidArgumentException;
 final class ActivityMapper implements ActivityMapperContract
 {
     private const DEFAULT_PER_PAGE = 15;
+
+    private const MIN_PER_PAGE = 1;
 
     /**
      * Builds an ActivityCreateDTO from validated input.
@@ -137,9 +141,27 @@ final class ActivityMapper implements ActivityMapperContract
     }
 
     /**
+     * Builds the options for the attach-to select. The label is derived from
+     * the alias rather than kept in a second list, so adding a record type
+     * cannot leave the select out of step with the allowlist that guards it.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function toTrackableTypeOptions(): array
+    {
+        return array_map(
+            fn(string $alias) => [
+                'value' => $alias,
+                'label' => str_replace('_', ' ', ucfirst($alias)),
+            ],
+            TrackableType::allowedTypes(),
+        );
+    }
+
+    /**
      * Reads the page size, falling back to the default. An absent value is not
-     * a dropped one, so only a supplied value that cannot be parsed is
-     * reported as ignored.
+     * a dropped one, so only a supplied value that cannot be used is reported
+     * as ignored - both an unparseable one and one outside the allowed bounds.
      *
      * @param array              $queryParams
      * @param array<int, string> $ignored Collects the field when dropped.
@@ -272,6 +294,10 @@ final class ActivityMapper implements ActivityMapperContract
     }
 
     /**
+     * Converts a page size, rejecting anything outside the bounds the domain
+     * filter accepts. The bound is checked here so an out-of-range value fails
+     * as bad input rather than as a domain exception inside the Service.
+     *
      * @param mixed $perPage
      *
      * @return int
@@ -287,7 +313,18 @@ final class ActivityMapper implements ActivityMapperContract
             ));
         }
 
-        return (int) $perPage;
+        $pageSize = (int) $perPage;
+
+        if ($pageSize < self::MIN_PER_PAGE || $pageSize > ActivityFilter::MAX_PER_PAGE) {
+            throw new InvalidArgumentException(sprintf(
+                'Unsupported value [%s] for filter [per_page]. Page size must be between %d and %d.',
+                (string) $pageSize,
+                self::MIN_PER_PAGE,
+                ActivityFilter::MAX_PER_PAGE,
+            ));
+        }
+
+        return $pageSize;
     }
 
     /**

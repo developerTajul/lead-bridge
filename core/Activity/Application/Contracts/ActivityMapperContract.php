@@ -58,4 +58,13 @@ interface ActivityMapperContract
      * @return array{0: ActivityFilterDTO, 1: array<int, string>} The DTO and the ignored fields.
      */
     public function mapToFilterDTOLenient(array $queryParams): array;
+
+    /**
+     * Builds the options for the attach-to select, from the record types an
+     * activity may be attached to. Each option pairs the stored morph alias
+     * with the label shown for it.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function toTrackableTypeOptions(): array;
 }

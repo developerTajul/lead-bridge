@@ -153,6 +153,20 @@ final class AdminActivityIndexTest extends TestCase
         $response->assertSee('Invalid filter applied. Showing unfiltered results.');
     }
 
+    /**
+     * Regression: an out-of-range page size used to slip past the mapper and
+     * throw inside the Service, so a stale bookmark like ?per_page=500 turned
+     * the list into an error page.
+     */
+    public function test_index_falls_back_to_the_default_page_size_for_an_out_of_range_value(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->get(route('admin.activities.index', ['per_page' => 500]));
+
+        $response->assertOk();
+        $this->assertSame(ActivityFilter::MAX_PER_PAGE, $this->receivedFilters[0]->perPage);
+    }
+
     public function test_index_shows_no_warning_when_every_filter_is_usable(): void
     {
         $response = $this->actingAs($this->makeUser())

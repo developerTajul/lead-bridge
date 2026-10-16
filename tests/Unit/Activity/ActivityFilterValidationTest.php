@@ -101,12 +101,42 @@ final class ActivityFilterValidationTest extends TestCase
         ];
     }
 
-    public function test_an_invalid_per_page_is_rejected_rather_than_coerced(): void
+    /**
+     * The mapper owns the page-size bound, so an out-of-range value must be
+     * rejected as bad input instead of reaching the domain filter and throwing
+     * from inside the Service.
+     */
+    #[DataProvider('unusablePageSizes')]
+    public function test_an_unusable_per_page_is_rejected_rather_than_coerced(mixed $perPage): void
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('for filter [per_page]');
 
-        $this->mapper->mapToFilterDTO(['per_page' => 'lots']);
+        $this->mapper->mapToFilterDTO(['per_page' => $perPage]);
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function unusablePageSizes(): array
+    {
+        return [
+            'not a number' => ['lots'],
+            'zero' => ['0'],
+            'negative' => ['-5'],
+            'just above the bound' => ['101'],
+            'far above the bound' => ['500'],
+            'an array' => [['25']],
+        ];
+    }
+
+    public function test_the_mapper_accepts_the_page_size_bounds(): void
+    {
+        $this->assertSame(1, $this->mapper->mapToFilterDTO(['per_page' => '1'])->perPage);
+        $this->assertSame(
+            ActivityFilter::MAX_PER_PAGE,
+            $this->mapper->mapToFilterDTO(['per_page' => (string) ActivityFilter::MAX_PER_PAGE])->perPage,
+        );
     }
 
     public function test_the_lenient_path_keeps_the_values_it_can_convert(): void
@@ -152,6 +182,33 @@ final class ActivityFilterValidationTest extends TestCase
         $this->assertNull($dto->userId);
         $this->assertNull($dto->filter);
         $this->assertSame(['status', 'type', 'user_id', 'filter', 'per_page'], $ignored);
+    }
+
+    /**
+     * A stale bookmark can carry any page size, so an out-of-range one must
+     * fall back to the default instead of reaching the domain filter and
+     * turning the list into an error page.
+     */
+    #[DataProvider('outOfRangePageSizes')]
+    public function test_the_lenient_path_falls_back_to_the_default_for_an_out_of_range_page_size(int $perPage): void
+    {
+        [$dto, $ignored] = $this->mapper->mapToFilterDTOLenient(['per_page' => (string) $perPage]);
+
+        $this->assertSame(15, $dto->perPage);
+        $this->assertSame(['per_page'], $ignored);
+
+        // The fallback has to be a size the domain filter still accepts.
+        $this->assertSame(15, (new ActivityFilter(perPage: $dto->perPage))->perPage);
+    }
+
+    public function test_the_lenient_path_keeps_a_page_size_on_the_bound(): void
+    {
+        [$dto, $ignored] = $this->mapper->mapToFilterDTOLenient([
+            'per_page' => (string) ActivityFilter::MAX_PER_PAGE,
+        ]);
+
+        $this->assertSame(ActivityFilter::MAX_PER_PAGE, $dto->perPage);
+        $this->assertSame([], $ignored);
     }
 
     public function test_the_lenient_path_reports_nothing_for_absent_values(): void

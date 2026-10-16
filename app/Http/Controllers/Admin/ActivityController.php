@@ -84,7 +84,9 @@ final class ActivityController extends Controller
      */
     public function create(): View
     {
-        return view('admin.activities.create');
+        return view('admin.activities.create', [
+            'trackableTypes' => $this->mapper->toTrackableTypeOptions(),
+        ]);
     }
 
     /**
