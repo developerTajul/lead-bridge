@@ -1,44 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@yield('title', 'Admin Panel')</title>
 
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Select2 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
-    <!-- jQuery CDN -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Select2 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <!-- Alpine.js CDN -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-    @stack('styles')
+    @include('layouts.partials.styles')
+    @yield('styles')
 </head>
-<body class="bg-gray-100 font-sans antialiased">
 
-    <div class="flex h-screen overflow-hidden">
+<body class="t-bg-primary mx-sidenav-not-collapsed">
 
-        @include('layouts.partials.asidebar')
 
-        <!-- Main Content Area -->
-        <div class="flex flex-col flex-1 h-full overflow-hidden">
+    <!-- Side Nav / Display Only Small Screen  -->
+    @include('layouts.partials.asidebar-mobile')
+    <!-- Side Nav / Display Only Small Screen  End-->
 
-            @include('layouts.partials.header')
+    <!-- Page Wrapper -->
+    <div class="container-fluid p-0">
+        <div class="row g-0">
+            <!--SideNav / Display Only Small Screen  -->
+            @include('layouts.partials.asidebar-small')
+            <!--HSideNav/ Display Only Small Screen End -->
+            @include('layouts.partials.asidebar')
+            <!--SideNav / Display Only Large Screen  -->
 
-            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
-                @yield('content')
-            </main>
+            <!--SideNav / Display Only Large Screen End -->
 
-            @include('layouts.partials.footer')
+            <div class="col-9 col-xxl-10 flex-grow-1">
+                <div class="container-fluid px-2 px-xxl-0">
+                    <div class="row g-2 g-xxl-0">
+                        <div class="col-12">
+                            <div class="mx-body">
+
+                                @include('layouts.partials.header')    
+
+                                <div class="mx-body__content" data-simplebar>
+
+                                    <main class="main-content t-mt-15 t-mb-15">
+                                        <div class="container-fluid px-3">
+                                            <div class="row g-3">
+                                                @yield('content')
+                                            </div>
+                                        </div>
+                                    </main>
+
+                                    @include('layouts.partials.footer')
+
+
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-
-    @stack('scripts')
+    <!-- Page Wrapper End -->
+    @include('layouts.partials.scripts')
+    @yield('scripts')
 </body>
+
 </html>

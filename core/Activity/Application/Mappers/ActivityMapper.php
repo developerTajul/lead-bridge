@@ -51,6 +51,12 @@ final class ActivityMapper implements ActivityMapperContract
     /**
      * Builds an ActivityUpdateDTO from validated input.
      *
+     * An absent key leaves the field unchanged. A supplied null or blank string
+     * clears it, which is what a client gets by submitting an emptied form
+     * field, and the clear flag is what carries that intent down to the entity.
+     * Any other value replaces the field. Only due_date and description can be
+     * cleared this way; the remaining fields have no clear flag.
+     *
      * @param int   $id            The activity ID from the route.
      * @param array $validatedData The validated input data from the delivery layer.
      *
@@ -60,10 +66,6 @@ final class ActivityMapper implements ActivityMapperContract
      */
     public function mapToUpdateDTO(int $id, array $validatedData): ActivityUpdateDTO
     {
-        // An absent key and a null value both mean "leave unchanged" for every
-        // field. Clearing a nullable field is a separate intent, carried by the
-        // clear flags below rather than by a null, so that a client can send
-        // description: null without dropping the stored description.
         $clearsDueDate = array_key_exists('due_date', $validatedData)
             && $this->isBlank($validatedData['due_date']);
         $clearsDescription = array_key_exists('description', $validatedData)
@@ -75,6 +77,11 @@ final class ActivityMapper implements ActivityMapperContract
             type: array_key_exists('type', $validatedData) && is_string($validatedData['type'])
                 ? $this->toType($validatedData['type'])
                 : null,
+            // A blank description and its clear flag travel together: the entity
+            // reads the flag, and the null keeps the payload self-consistent
+            // against the "replaced and cleared at once" contradiction. An empty
+            // string needs the explicit null, since it is blank enough to clear
+            // but still a value the DTO would otherwise carry.
             description: $clearsDescription ? null : ($validatedData['description'] ?? null),
             dueDate: $this->toDateTime($validatedData['due_date'] ?? null, 'due_date'),
             completedAt: $this->toDateTime($validatedData['completed_at'] ?? null, 'completed_at'),

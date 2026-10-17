@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Admin\ActivityController;
 use App\Http\Controllers\Admin\LeadController;
+use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\DealController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
@@ -25,7 +28,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::prefix('admin')->name('admin.')->group(function () {
-        Route::resource('leads', LeadController::class)->only(['store']);
-        Route::resource('activities', ActivityController::class)->only(['index', 'create', 'store']);
+        Route::resource('leads', LeadController::class);
+        Route::resource('activities', ActivityController::class);
+        Route::resource('companies', CompanyController::class);
+        Route::resource('contacts', ContactController::class);
+        Route::resource('deals', DealController::class);
     });
 });

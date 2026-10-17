@@ -1,52 +1,244 @@
-<!-- Admin Sidebar -->
-<aside class="hidden md:flex md:flex-shrink-0">
-    <div class="flex flex-col w-64 bg-slate-900 text-white">
-        <div class="flex items-center justify-center h-20 shadow-md bg-slate-950">
-            <h1 class="text-2xl font-bold tracking-wider"><i class="fa-solid fa-gauge-high mr-2 text-indigo-400"></i>AdminPanel</h1>
+<div class="col-3 col-xxl-2 mx-sidenav d-none d-xl-block">
+    <!-- Side Nav  -->
+    <div class="mx-sidenav__content t-bg-primary">
+        <!-- Side Nav Brand  -->
+        <div class="mx-sidenav__brand">
+            <a href="{{ route('dashboard') }}" class="mx-sidenav__logo t-link">
+                <img src="assets/img/logo-w.png" alt="Adminage" class="img-fluid mx-sidenav__logo-is">
+            </a>
+            <a href="index.html" class="t-link mx-sidenav__logo-sm">
+                <img src="assets/img/logo-w-sm.png" alt="Adminage" class="img-fluid mx-sidenav__logo-sm-is">
+            </a>
         </div>
-            @if (Route::has('admin.users.index'))
-                @php
-                    $activeMenuKey = request()->routeIs('admin.users.*') ? 'users' : '';
-                @endphp
-        <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto"
-             x-data="{ openMenu: '{{ $activeMenuKey }}' }">
+        <!-- Side Nav Brand  End-->
+        <div class="mx-sidenav__menu-container">
+            <nav class="mx-sidenav__menu">
+                <ul class="t-list mx-sidenav__menu-is">
+                    <li class="mx-sidenav__menu-item active-page">
+                        <a href="index.html" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <span class='bx bx-category'></span>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                dashboard
+                            </span>
+                        </a>
+                    </li>
 
-            <!-- Users Dropdown Menu -->
-            <div>
-                <button type="button"
-                    @click="openMenu = (openMenu === 'users' ? null : 'users')"
-                    :aria-expanded="openMenu === 'users' ? 'true' : 'false'"
-                    :class="openMenu === 'users' ? 'text-white bg-indigo-600' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
-                    class="w-full flex items-center justify-between px-4 py-3 rounded-lg shadow-sm focus:outline-none transition-colors">
-                    <span class="flex items-center"><i class="fa-solid fa-user-gear w-6"></i> Users</span>
-                    <i class="fa-solid fa-chevron-down text-xs transition-transform duration-300 ease-in-out" :class="openMenu === 'users' ? 'rotate-180 text-white' : 'rotate-0 text-slate-400'"></i>
-                </button>
-                <div x-show="openMenu === 'users'"
-                     x-transition:enter="transition-all ease-out duration-300"
-                     x-transition:enter-start="opacity-0 max-h-0"
-                     x-transition:enter-end="opacity-100 max-h-96"
-                     x-transition:leave="transition-all ease-in duration-200"
-                     x-transition:leave-start="opacity-100 max-h-96"
-                     x-transition:leave-end="opacity-0 max-h-0"
-                     {{ $activeMenuKey !== 'users' ? 'style="display: none;"' : '' }}
-                     class="overflow-hidden pl-4 pr-2 py-2 space-y-1 bg-slate-950/50 rounded-lg mt-1">
-                    <a href="{{ route('admin.users.index') }}"
-                       class="flex items-center px-4 py-2 rounded-md {{ request()->routeIs('admin.users.index') ? 'text-white bg-slate-800' : 'text-slate-300 hover:text-white hover:bg-slate-800' }}">
-                        <i class="fa-solid fa-circle-dot w-4 text-[10px] mr-2 {{ request()->routeIs('admin.users.index') ? 'text-indigo-400' : '' }}"></i> User List
-                    </a>
-                    <a href="{{ route('admin.users.create') }}"
-                       class="flex items-center px-4 py-2 rounded-md {{ request()->routeIs('admin.users.create') ? 'text-white bg-slate-800' : 'text-slate-300 hover:text-white hover:bg-slate-800' }}">
-                        <i class="fa-solid fa-circle-dot w-4 text-[10px] mr-2 {{ request()->routeIs('admin.users.create') ? 'text-indigo-400' : '' }}"></i> Add User
-                    </a>
-                </div>
-            </div>
-        </nav>
-        @endif
-        <div class="p-4 bg-slate-950">
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit" class="flex items-center w-full px-4 py-2 text-red-400 hover:bg-slate-900 rounded-lg"><i class="fa-solid fa-right-from-bracket w-6"></i> Logout</button>
-            </form>
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <span class='bx bx-user-circle'></span>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                user
+                            </span>
+                        </a>
+                        <ul class="t-list mx-sidenav__sub mx-sidenav__sub--hide">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="user.html" class="mx-sidenav__sub-link">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bxs-user-plus'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        user
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="user-list.html" class="mx-sidenav__sub-link ">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bxs-user-detail'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        user list
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <li class="mx-sidenav__menu-item">
+                        <a href="profile.html" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bxs-user-account'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                profile
+                            </span>
+                        </a>
+                    </li>
+
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bxs-folder-open'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Leads
+                            </span>
+                        </a>
+                        <ul class="t-list mx-sidenav__sub mx-sidenav__sub--hide">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="create-project.html" class="mx-sidenav__sub-link">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <span class='bx bx-pulse'></span>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Lead
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="project-list.html" class="mx-sidenav__sub-link ">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <span class='bx bx-pulse'></span>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Leads list
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bx-message-detail'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Activity
+                            </span>
+                        </a>
+                        <ul class="t-list mx-sidenav__sub mx-sidenav__sub--hide">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="chat.html" class="mx-sidenav__sub-link">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-message-dots'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Activity
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="group-chat.html" class="mx-sidenav__sub-link ">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bxs-message-dots'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Activities List
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bxs-detail'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Company
+                            </span>
+                        </a>
+                        <ul class="t-list mx-sidenav__sub mx-sidenav__sub--hide">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="form.html" class="mx-sidenav__sub-link">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-news'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Companies
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="form-validation.html" class="mx-sidenav__sub-link ">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-task'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Companies
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+
+
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub">
+                        <a href="price-table.html" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bx-receipt'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Contacts
+                            </span>
+                        </a>
+                        <ul class="t-list mx-sidenav__sub mx-sidenav__sub--hide">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="form.html" class="mx-sidenav__sub-link">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-news'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Contacts
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="form-validation.html" class="mx-sidenav__sub-link ">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-task'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Companies
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bx-library'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Deals
+                            </span>
+                        </a>
+                        <ul class="t-list mx-sidenav__sub mx-sidenav__sub--hide">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="button.html" class="mx-sidenav__sub-link">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-mobile-alt bx-rotate-90'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Deal
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="dropdown.html" class="mx-sidenav__sub-link ">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-upload bx-rotate-180'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        View Deals
+                                    </span>
+                                </a>
+                            </li>
+                            
+                        </ul>
+                    </li>
+                </ul>
+            </nav>
         </div>
     </div>
-</aside>
+    <!-- Side Nav End -->
+</div>
