@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Activity;
 
 use App\Models\User;
+use Core\Activity\Domain\Enums\ActivityType;
+use Core\Activity\Domain\ValueObjects\TrackableType;
 use Tests\TestCase;
 
 /**
@@ -55,6 +57,71 @@ final class AdminActivityCreateFormTest extends TestCase
     }
 
     /**
+     * Every field the request validates must be postable, otherwise a
+     * required rule would make the form impossible to submit.
+     */
+    public function test_the_form_posts_every_field_the_request_validates(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->get(route('admin.activities.create'));
+
+        $response->assertOk();
+        $response->assertSee('name="subject"', false);
+        $response->assertSee('name="type"', false);
+        $response->assertSee('name="description"', false);
+        $response->assertSee('name="trackable_type"', false);
+        $response->assertSee('name="trackable_id"', false);
+        $response->assertSee('name="due_date"', false);
+        $response->assertSee('name="user_id"', false);
+    }
+
+    public function test_the_form_posts_to_the_store_route_with_a_csrf_token(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->get(route('admin.activities.create'));
+
+        $response->assertOk();
+        $response->assertSee('action="'.route('admin.activities.store').'"', false);
+        $response->assertSee('name="_token"', false);
+    }
+
+    /**
+     * The type select is driven off the enum the request validates against,
+     * so a new case cannot be accepted by the write path yet unselectable here.
+     */
+    public function test_the_type_select_lists_every_activity_type(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->get(route('admin.activities.create'));
+
+        $response->assertOk();
+
+        foreach (ActivityType::cases() as $activityType) {
+            $response->assertSee('value="'.$activityType->value.'"', false);
+        }
+    }
+
+    /**
+     * A failed save redirects back with the input, so each field has to
+     * repopulate from old() rather than rendering empty.
+     */
+    public function test_the_fields_repopulate_from_the_previous_input(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->withSession(['_old_input' => [
+                'subject' => 'Discovery call',
+                'type' => ActivityType::CALL->value,
+                'trackable_type' => TrackableType::allowedTypes()[0],
+                'trackable_id' => '42',
+            ]])
+            ->get(route('admin.activities.create'));
+
+        $response->assertOk();
+        $response->assertSee('value="Discovery call"', false);
+        $response->assertSee('value="42"', false);
+    }
+
+    /**
      * The select is fed from the same allowlist the write path validates
      * against, so a record type added there cannot go missing from the form.
      */
@@ -69,7 +136,7 @@ final class AdminActivityCreateFormTest extends TestCase
         $options = $response->viewData('trackableTypes');
 
         $this->assertSame(
-            \Core\Activity\Domain\ValueObjects\TrackableType::allowedTypes(),
+            TrackableType::allowedTypes(),
             array_column($options, 'value'),
         );
 
