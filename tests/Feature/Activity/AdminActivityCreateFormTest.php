@@ -122,6 +122,23 @@ final class AdminActivityCreateFormTest extends TestCase
     }
 
     /**
+     * A rejected save redirects back and the form re-renders from the shared
+     * error bag, so the invalid markup has to actually reach the browser
+     * rather than sitting in the template unexercised.
+     */
+    public function test_a_rejected_save_marks_the_failed_fields_invalid(): void
+    {
+        $response = $this->actingAs($this->makeUser())
+            ->from(route('admin.activities.create'))
+            ->followingRedirects()
+            ->post(route('admin.activities.store'), []);
+
+        $response->assertOk();
+        $response->assertSee('is-invalid', false);
+        $response->assertSee('invalid-feedback', false);
+    }
+
+    /**
      * The select is fed from the same allowlist the write path validates
      * against, so a record type added there cannot go missing from the form.
      */
