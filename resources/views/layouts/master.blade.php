@@ -40,11 +40,7 @@
                                 <div class="mx-body__content" data-simplebar>
 
                                     <main class="main-content t-mt-15 t-mb-15">
-                                        <div class="container-fluid px-3">
-                                            <div class="row g-3">
-                                                @yield('content')
-                                            </div>
-                                        </div>
+                                        @yield('content')
                                     </main>
 
                                     @include('layouts.partials.footer')

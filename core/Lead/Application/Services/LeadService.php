@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Core\Lead\Application\Services;
 
+use Core\Lead\Application\Contracts\LeadQueryContract;
 use Core\Lead\Application\Contracts\LeadServiceInterface;
 use Core\Lead\Application\DTOs\Requests\LeadCreateDTO;
+use Core\Lead\Application\DTOs\Requests\LeadFilterDTO;
+use Core\Lead\Application\DTOs\Responses\LeadProjectionDTO;
+use Core\Lead\Application\Mappers\LeadResponseMapper;
 use Core\Lead\Domain\Contracts\LeadRepositoryContract;
+use Core\Lead\Domain\Exceptions\InvalidLeadException;
+use Core\Lead\Domain\ValueObjects\LeadFilter;
 use Core\Shared\Application\Contracts\QueueManagerContract;
 use Core\Lead\Domain\DataObjects\LeadData;
 use Core\Shared\Application\DTOs\Result;
@@ -18,8 +24,18 @@ use Core\Shared\Application\DTOs\Result;
  */
 final class LeadService implements LeadServiceInterface
 {
+    private const ERROR_INVALID = 'LEAD_INVALID';
+
+    private const ERROR_INDEX_FAILED = 'LEAD_INDEX_FAILED';
+
+    private const ERROR_NOT_FOUND = 'LEAD_NOT_FOUND';
+
+    private const ERROR_FETCH_FAILED = 'LEAD_FETCH_FAILED';
+
     public function __construct(
         private readonly LeadRepositoryContract $leadRepository,
+        private readonly LeadQueryContract $leadQuery,
+        private readonly LeadResponseMapper $leadResponseMapper,
         private readonly QueueManagerContract $queueManager
     ) {}
 
@@ -30,7 +46,69 @@ final class LeadService implements LeadServiceInterface
      */
     public function captureLead(LeadCreateDTO $dto): void
     {
-        $this->queueManager->push('lead.inbound.process', $dto); 
+        $this->queueManager->push('lead.inbound.process', $dto);
+    }
+
+    /**
+     * Returns the paginated lead list matching the given criteria.
+     *
+     * @param LeadFilterDTO $leadFilterDTO
+     *
+     * @return Result Contains the PaginatedResult of LeadResponseDTO on success.
+     */
+    public function getLeads(LeadFilterDTO $leadFilterDTO): Result
+    {
+        try {
+            $leadFilter = new LeadFilter(
+                status: $leadFilterDTO->status,
+                source: $leadFilterDTO->source,
+                search: $leadFilterDTO->search,
+                perPage: $leadFilterDTO->perPage,
+            );
+
+            $paginatedLeads = $this->leadQuery->getFilteredLeads($leadFilter);
+
+            // Entities become response DTOs here, so nothing downstream of the
+            // Service ever sees a domain object.
+            $mappedPaginatedResult = $paginatedLeads->map(
+                fn(LeadProjectionDTO $projection) => $this->leadResponseMapper->toResponseDTO($projection)
+            );
+
+            return Result::success(
+                data: $mappedPaginatedResult,
+                message: 'Leads retrieved successfully.'
+            );
+        } catch (InvalidLeadException $exception) {
+            // A rejected filter is bad input, not a system failure.
+            return Result::failure($exception->getMessage(), self::ERROR_INVALID);
+        } catch (\Throwable) {
+            return Result::failure('Failed to retrieve leads.', self::ERROR_INDEX_FAILED);
+        }
+    }
+
+    /**
+     * Returns a single lead by its ID.
+     *
+     * @param int $id
+     *
+     * @return Result Contains the LeadResponseDTO on success.
+     */
+    public function getLeadById(int $id): Result
+    {
+        try {
+            $leadProjection = $this->leadQuery->findById($id);
+
+            if (! $leadProjection) {
+                return Result::failure('Lead not found.', self::ERROR_NOT_FOUND);
+            }
+
+            return Result::success(
+                data: $this->leadResponseMapper->toResponseDTO($leadProjection),
+                message: 'Lead retrieved successfully.'
+            );
+        } catch (\Throwable) {
+            return Result::failure('Failed to retrieve lead.', self::ERROR_FETCH_FAILED);
+        }
     }
 
     /**
