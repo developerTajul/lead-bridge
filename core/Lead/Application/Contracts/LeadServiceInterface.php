@@ -6,6 +6,7 @@ namespace Core\Lead\Application\Contracts;
 
 use Core\Lead\Application\DTOs\Requests\LeadCreateDTO;
 use Core\Lead\Application\DTOs\Requests\LeadFilterDTO;
+use Core\Lead\Domain\Enums\LeadStatus;
 use Core\Shared\Application\DTOs\Result;
 
 /**
@@ -40,4 +41,14 @@ interface LeadServiceInterface
      * @return Result Contains the LeadResponseDTO on success.
      */
     public function getLeadById(int $id): Result;
+
+    /**
+     * Moves a lead to a new status through the domain rules.
+     *
+     * @param int        $leadId
+     * @param LeadStatus $status
+     *
+     * @return Result Contains the LeadEntity on success.
+     */
+    public function changeStatus(int $leadId, LeadStatus $status): Result;
 }

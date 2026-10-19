@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
-use App\Models\Lead;
+use Core\Lead\Application\Contracts\LeadServiceInterface;
 use Core\Lead\Application\DTOs\Requests\UpdateLeadStatusQueueDTO;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -10,7 +12,11 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class UpdateLeadStatusJob implements ShouldQueue
+/**
+ * Applies a queued status change through the lead service, so the domain
+ * rules decide whether the change is allowed.
+ */
+final class UpdateLeadStatusJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -18,10 +24,13 @@ class UpdateLeadStatusJob implements ShouldQueue
         public readonly UpdateLeadStatusQueueDTO $dto
     ) {}
 
-    public function handle(): void
+    /**
+     * @param LeadServiceInterface $leadService
+     *
+     * @return void
+     */
+    public function handle(LeadServiceInterface $leadService): void
     {
-        Lead::where('id', $this->dto->leadId)
-            ->where('status', 'new')
-            ->update(['status' => $this->dto->status]);
+        $leadService->changeStatus($this->dto->leadId, $this->dto->status);
     }
 }

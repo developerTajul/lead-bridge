@@ -1,22 +1,32 @@
 ---
 name: update-action-builder
-description: Trace and review the end-to-end update flow in Hexagonal Architecture. Enforces strict Result Pattern usage in Controllers, transaction rollbacks, and file cleanup.
+description: Build, trace, and review the end-to-end update flow in Hexagonal Architecture (FormRequest, Request DTO and Mapper, Controller, Command Service with transaction and row lock, Entity behaviour, Repository, view). Enforces Result Pattern, rollback on every early return, file cleanup, events after commit, and the Rich Domain Model.
 ---
 
 # Update Action Builder Skill
 
 ## Description
 
-Trace and review what happens end-to-end when a user clicks "Update" on an Update Form in a Laravel Clean/Hexagonal Architecture project — from the browser request through Middleware, Route, FormRequest, Controller, Mapper, Service (transaction + business logic), Repository, Model/DB, and back to the response. Use this skill whenever the developer asks to build, review, or debug an update flow for any module (Category, Product, Auth, etc.), whenever reviewing a Controller/Service/Repository trio for an update action, or whenever checking for the known bug classes (missing rollback on early return, TOCTOU race conditions, orphaned uploaded files, Result pattern misuse, LSP violations). Also use when asked to trace or explain "what happens when the update button is clicked."
+Build, trace, and review what happens end-to-end when a user clicks "Update" on an Update Form in a Laravel Clean/Hexagonal Architecture project: from the browser request through Middleware, Route, FormRequest, Controller, Mapper, Command Service (transaction, row lock, Entity behaviour), Repository, Model/DB, and back to the response. Use this skill whenever the developer asks to build, review, or debug an update flow for any module, whenever reviewing a Controller/Command Service/Repository trio for an update action, or whenever checking for the known bug classes (missing rollback on early return, TOCTOU race conditions, orphaned uploaded files, Result pattern misuse, events fired before commit, business rules leaking into the Service). Also use when asked to trace or explain "what happens when the update button is clicked."
 
+> **This work follows the Rich Domain Model.** The Entity owns the business rules; the Command Service is an orchestrator only. Update is a **write** use case, so it lives in `{ModuleName}CommandService`, never in a Query Service. Read `AGENTS.md`, and load `.claude/rules/04-crud-pipeline.txt`, `05-rich-domain-and-services.txt`, and `06-ports-and-portability.txt` before building or reviewing.
 
-# Laravel Update Flow — Lifecycle & Review Skill
+**Placeholders used in this skill:**
 
-This skill traces **what happens after the "Update" button is clicked**, step by step, through the full request lifecycle in a Clean/Hexagonal Architecture project — and reviews each layer against the bug classes that have been found repeatedly in real codebases.
+| Placeholder    | Meaning                               | Example                        |
+| -------------- | ------------------------------------- | ------------------------------ |
+| `{ModuleName}` | PascalCase module name                | `Category`, `Product`, `Brand` |
+| `{module}`     | lowercase/plural route & view segment | `categories`, `products`       |
+| `{entity}`     | camelCase singular variable name      | `category`, `product`, `brand` |
+| `{MODULE}`     | UPPER_SNAKE_CASE error-key prefix     | `CATEGORY`, `PRODUCT`, `BRAND` |
 
-Use this skill for two purposes:
-1. **Explaining/tracing** the full lifecycle when asked (e.g. "what happens when the update button is clicked")
-2. **Reviewing** a new or existing Controller → Service → Repository trio against the Known Bug Watchlist below
+Use this skill for three purposes:
+
+1. **Explaining/tracing** the full lifecycle when asked (e.g. "what happens when the update button is clicked").
+2. **Reviewing** a new or existing Controller -> Command Service -> Repository trio against the Known Bug Watchlist below.
+3. **Building** a new update flow, following the Build Guidance section.
+
+When reviewing or building, do not change anything outside the request (AGENTS.md - STRICT SCOPE ADHERENCE). Older modules (single `{ModuleName}Service`, no Entity behaviour) keep their current shape unless the prompt asks to migrate them. Review them against the same bug classes and report the architecture gaps without refactoring.
 
 ## Quick Reference: Full Lifecycle (top to bottom)
 
@@ -24,43 +34,44 @@ Use this skill for two purposes:
 Browser (Update button click, form submit)
    │
    ▼
-HTTP Request (PUT/PATCH) ──► Route (web.php/api.php)
+HTTP Request (PUT/PATCH) ──► Route (Route::resource(...)->only([... 'update']))
    │
    ▼
 Middleware stack (auth, CSRF, throttle, etc.)
    │
    ▼
 FormRequest (e.g. CategoryUpdateRequest)
-   — authorize() + validated rules run BEFORE the controller method executes
+   — authorize() + validation rules run BEFORE the controller method executes
    │
    ▼
-Controller::update()
-   — thin, orchestration only
-   — Mapper: array → DTO (request → CategoryUpdateDTO)
-   — calls Service, translates Result → HTTP response
+Controller::update(UpdateRequest $request, int $id)
+   — thin, orchestration only; Service and Mapper constructor-injected
+   — Mapper: plain array -> Request DTO ($this->mapper->mapToUpdateDTO($request->validated()))
+   — calls ONE Command Service method, translates Result -> HTTP response (guard clause)
    │
    ▼
-Service::updateCategory()  ← business logic lives here
+CommandService::update{ModuleName}()  ← orchestration only
    1. beginTransaction()
-   2. findById()          — existing entity fetch (read)
-   3. business rules      — slug regen if name changed, thumbnail upload, etc.
-   4. repository->update()— actual persistence (write)
-   5. commit() / rollback()
-   6. side-effect cleanup — delete old/orphaned files AFTER commit
+   2. findByIdForUpdate()   — locking read of the existing Entity
+   3. derived fields        — slug via SlugGenerator, new file via FileUploaderContract (DTO with*() clones)
+   4. Entity behaviour      — business rules run INSIDE the Entity, returns a NEW Entity
+   5. repository->update(entity) — persistence (write)
+   6. commit() / rollback() — every early return and every catch rolls back
+   7. after commit          — delete old/orphaned files, dispatch released Domain Events
    │
    ▼
-Repository::update() / findById()
-   — Model-facing, translates array/DTO ⇄ Domain Entity via mapper
+Repository::update() / findByIdForUpdate()
+   — Model-facing; translates Entity ⇄ table array through the EntityMapper
    │
    ▼
-BaseRepository (findRecord/updateRecord)
-   — raw Eloquent: find(), fill(), isDirty(), save()
+BaseRepository (findRecordForUpdate / updateRecord)
+   — raw Eloquent: lockForUpdate(), fill(), isDirty(), save()
    │
    ▼
 Database
    │
    ▼
-Result (success/failure) bubbles back up through Repository → Service → Controller
+Result (success/failure) bubbles back up through Command Service -> Controller
    │
    ▼
 Controller returns RedirectResponse (back()->with('error') or redirect()->with('success'))
@@ -71,56 +82,161 @@ Browser re-renders (session flash message shown)
 
 ## Responsibilities & Known Bug Watchlist Per Layer
 
-Apply the checklist below when reviewing each layer. These are all drawn from bugs actually found in real projects.
+Apply the checklist below when reviewing each layer. These come from bugs actually found in real projects.
 
-### 1. FormRequest
-- [ ] Validation rules cover format only, not business invariants (e.g. slug uniqueness) — business rules belong in the Service layer, not the FormRequest.
+### 1. FormRequest and Route
+
+- [ ] Validation rules cover presence and format only (`required`, `string`, `max`, `image`, `Rule::in(Enum::values())`). Business invariants (e.g. slug uniqueness) belong in the Entity/Command Service, not the FormRequest.
 - [ ] `authorize()` is correctly handled (no missing policy/gate check).
+- [ ] The route is declared through `Route::resource()` inside the existing group, with `'update'` in `->only([...])`. No hand-written `Route::put(...)` line.
 
 ### 2. Controller
-- [ ] **Stays thin** — no business logic, no direct Model/Repository access. Only Mapper → Service → Result-to-response.
-- [ ] `Result::isFailure()` is checked and both branches (success/failure) are handled.
-- [ ] **NEVER uses try-catch blocks to catch Domain Exceptions** — the Service layer MUST catch its own exceptions internally and return a `Result::failure` object. The Controller MUST remain thin and ONLY evaluate the returned `Result` object (e.g., `if ($result->isFailure())`).
-- [ ] LSP check: this Controller doesn't violate the contract of any abstract base class/interface it implements (a previously found issue class).
 
-### 3. Service (this is where most bugs have been found — the most important section)
+- [ ] **Stays thin:** no business logic, no direct Model/Repository access. Only Mapper -> Command Service -> Result-to-response.
+- [ ] **Constructor injection:** the Command Service and `$mapper` (the `...MapperContract`) come through the constructor. `update()` receives only the FormRequest and the route id.
+- [ ] The mapper accepts a plain `array` (`$request->validated()`), never the FormRequest.
+- [ ] `Result::isFailure()` is checked with a **guard clause**, not a ternary, and both outcomes are handled.
+- [ ] **NEVER uses try-catch blocks to catch Domain Exceptions.** The Service catches its own exceptions and returns `Result::failure`. The Controller only evaluates the returned `Result`.
+- [ ] LSP check: the Controller does not violate the contract of any abstract base class/interface it implements.
 
-- [ ] **No leftover debug statements** — `dd()`, `dump()`, `var_dump()` in any line.
-- [ ] **Every early-return inside a transaction MUST return a `Result::failure`** — the Service layer MUST catch its own exceptions internally and return a `Result::failure` object. The Controller MUST remain thin and only evaluate the returned `Result` object.
-- [ ] **TOCTOU race condition — MANDATORY row-level locking.** Inside an update transaction, the initial read of the target record MUST use a locking read, never a plain read. Concretely:
-  - The Service MUST call `$repository->findByIdForUpdate($id)`, NOT `findById($id)`, for the "fetch existing entity" step of `update*()`.
-  - `findById()` inside a transaction is a **🔴 Critical violation** — it takes no lock, so a concurrent request can mutate the row between the read and the write. A `UNIQUE` index only protects the slug; every other column (price, status, featured_image) is left racy.
-  - The module's `RepositoryContract` MUST declare `findByIdForUpdate(int $id): ?{Module}Entity`, and the concrete Repository MUST implement it via `BaseRepository::findRecordForUpdate()` (which applies `lockForUpdate()`). Do not re-implement the lock in the module repository.
-  - The post-write refresh read (reloading the entity so it contains newly-created child rows) MAY use plain `findById()` — the row is already locked by that point in the transaction.
-  - Unit tests MUST stub `findByIdForUpdate` for the pre-write read; a test that only stubs `findById` will silently pass against a non-locking implementation and is itself a violation.
-- [ ] **File cleanup is correct on every branch**:
-  - If a new thumbnail was uploaded and a later step (e.g. repository update) fails, is the uploaded file deleted (orphan file bug)?
-  - On the success path, is the old thumbnail deleted **after** commit (deleting before commit risks losing the old file if a rollback happens)?
-- [ ] **Result Pattern used correctly** — `Result` is appropriate when there are two valid business outcomes (success/not-found); a direct return type is appropriate when data is always guaranteed (avoid over-engineering).
-- [ ] **Duplicate failure messages/error codes** are DRY'd up (via a helper method).
-- [ ] Service layer stays output-agnostic — behaves the same whether called from Web, API, or CLI.
+### 3. Command Service (the most important section: most bugs are found here)
+
+- [ ] **No leftover debug statements:** `dd()`, `dump()`, `var_dump()` anywhere.
+- [ ] **Every early return inside a transaction rolls back first.** Not-found, domain-exception, and repository-returned-`false` branches each call `rollback()` before `return Result::failure(...)`. A bare early return leaves the transaction open (🔴 Critical).
+- [ ] **One dedicated `catch` block per domain exception**, each rolling back and returning `Result::failure` with its own domain key. A domain exception must never fall through to the generic `catch (\Throwable)`. The generic block rolls back, cleans up, logs the exception object, and returns a safe generic failure.
+- [ ] **TOCTOU race condition: MANDATORY row-level locking.** The "fetch existing entity" step of `update*()` MUST use a locking read, never a plain read:
+    - The Service calls `findByIdForUpdate($id)`, NOT `findById($id)`.
+    - `findById()` for that step inside a transaction is a **🔴 Critical violation**: it takes no lock, so a concurrent request can change the row between read and write. A `UNIQUE` index protects only the slug; every other column (price, status, featured image) stays racy.
+    - The module's `RepositoryContract` MUST declare `findByIdForUpdate(int $id): ?{ModuleName}Entity`, and the concrete Repository MUST implement it through `BaseRepository::findRecordForUpdate()` (which applies `lockForUpdate()`). Do not re-implement the lock in the module repository. Verify that `findRecordForUpdate()` exists in `BaseRepository`. If it does not, stop and tell the developer, because it is a Shared change.
+    - The post-write refresh read (reloading the entity so it contains newly created child rows) MAY use plain `findById()`: the row is already locked at that point.
+    - Test requirements for this lock are in `.claude/rules/07-testing.txt` (testing is paused; do not write or require tests).
+
+- [ ] **Business rules live in the Entity.** Rules, state transitions, and derived business values run through an Entity behaviour method that returns a NEW Entity. The Service never reads entity fields to decide (🟡 Design concern). Slug generation that needs a uniqueness check goes through `SlugGenerator`/`SlugCheckerContract` in the Service. The decision about whether a new slug is needed belongs to the Entity.
+- [ ] **File cleanup is correct on every branch:**
+    - If a new file was uploaded and any later step fails (repository update, domain exception, throwable), the newly uploaded file is deleted (orphan-file bug).
+    - On success, the old file is deleted **after** `commit()`. Deleting before commit risks losing the old file if the transaction rolls back.
+    - A failing file cleanup after a successful commit is logged, never turned into a failed update.
+- [ ] **Events and jobs fire only after commit.** Released Domain Events (`$entity->releaseEvents()`) go through `EventDispatcherContract` after `commit()`, never before and never on rollback. A failing dispatch after commit is logged and the Result stays success. The Entity never dispatches its own events.
+- [ ] **Result Pattern:** every Service method returns `Result` carrying a `{ModuleName}ResponseDTO` (never an Entity or Model). No exception leaks upward.
+- [ ] **Domain error keys:** `errorCode` values are keys like `{MODULE}_NOT_FOUND`, `{MODULE}_SLUG_CONFLICT`, never raw HTTP statuses.
+- [ ] **Duplicate failure messages/error codes** are DRY'd up through a helper method (e.g. `rollbackAndFail(...)`).
+- [ ] The Service stays output-agnostic: it behaves the same whether called from Web, API, Console Command, or a WordPress handler.
+- [ ] No framework import, facade, or helper in Core Domain/Application. Ports use the `...Contract` suffix.
 
 ### 4. Repository
-- [ ] Repository only handles persistence + Entity mapping — no business rule (slug logic, thumbnail logic) has leaked in here.
-- [ ] `findById()`/`update()` return null-safely rather than throwing (the Service layer decides based on null, not the Repository).
-- [ ] If a shared type like `PaginatedResult<T>` is involved, it lives in `Shared\Domain` (to avoid Dependency Rule violations) — check this too when reviewing listing/index endpoints.
+
+- [ ] Repository only handles persistence + Entity mapping. No business rule (slug logic, thumbnail logic) has leaked in.
+- [ ] It takes and returns **Entities**: `update(Entity): Entity`. It never accepts a DTO or loose array from the Service, and never returns an Eloquent Model.
+- [ ] `findById()` / `findByIdForUpdate()` return `null` when the record is missing (the Service decides based on null). Framework-specific failures are caught in the adapter and rethrown as a standard `RuntimeException`, never swallowed.
+- [ ] Entity -> table array goes through `EntityMapper::toPersistenceArray()`.
+- [ ] If a shared type like `PaginatedResult` is involved, it lives in `Shared\Domain` (avoids Dependency Rule violations). Check this when reviewing listing/index endpoints too.
 
 ### 5. BaseRepository
-- [ ] `isDirty()` is checked to avoid unnecessary `save()` calls (correct here — keep this pattern in future modules too).
-- [ ] Mass-assignment (`fill()`) has `$fillable`/`$guarded` properly set — otherwise unintended fields can be overwritten.
 
-### 6. View
+- [ ] `isDirty()` is checked to avoid unnecessary `save()` calls (correct here; keep this pattern in future modules).
+- [ ] Mass assignment (`fill()`) has `$fillable`/`$guarded` set properly, otherwise unintended fields can be overwritten.
+- [ ] `findRecordForUpdate()` is `protected` and applies `lockForUpdate()`, like the other helpers (framework types must not leak upward).
 
-- [ ] **View Update Guard:** The edit.blade.php file MUST be updated to replace the `action="#"` placeholder with the actual PUT/PATCH route once the update route is wired.
+### 6. View and Route Wiring
+
+- [ ] **View Update Guard:** `edit.blade.php` MUST replace the `action="#"` placeholder with `{{ route('admin.{module}.update', ${entity}->id) }}` once the update route is wired. Keep `@csrf`, `@method('PUT')`, and `enctype="multipart/form-data"` if and only if the schema has file/image columns. Remove any leftover "update route not defined yet" reminder.
+- [ ] The view reads only ResponseDTO properties and contains no business rule.
+
+## Build Guidance (when asked to implement the update flow)
+
+Build only what is missing, in this order, and verify every signature against the codebase before writing:
+
+1. **Route:** add `'update'` to the module's `Route::resource()->only([...])`.
+2. **FormRequest:** `{ModuleName}UpdateRequest`, format rules only, `authorize()` returns `true`.
+3. **Request DTO:** `Application/DTOs/Requests/{ModuleName}UpdateDTO`: a `readonly class` with promoted properties only, **no static factories**, uploaded files typed `mixed`, and a `with*()` clone for each derived field (`withSlug`, `withStoreImage`/`withLogo`).
+4. **Request Mapper:** add `mapToUpdateDTO(array $validatedData)` to `{ModuleName}MapperContract` and `{ModuleName}Mapper` (plain array, never a FormRequest).
+5. **Entity:** add the behaviour method(s) the update needs. They enforce the rules, throw domain exceptions on violations, and return a new instance.
+6. **Repository contract and adapter:** `findByIdForUpdate(int $id): ?Entity` and `update(Entity): Entity`.
+7. **Command Service:** `update{ModuleName}(int $id, {ModuleName}UpdateDTO ${entity}UpdateDTO): Result`, shaped like the reference below.
+8. **Controller:** append `update()`, using constructor-injected Service and `$mapper`, with a guard clause.
+9. **View:** bind the form action as described in section 6.
+
+Reference Command Service flow (verify the real `Result` signature, the Entity behaviour method name, and the port method names before using it):
+
+```php
+/**
+ * Updates a {entity}.
+ */
+public function update{ModuleName}(int $id, {ModuleName}UpdateDTO ${entity}UpdateDTO): Result
+{
+    $uploadedPath = null;
+
+    $this->transactionManager->beginTransaction();
+
+    try {
+        ${entity}Entity = $this->{entity}Repository->findByIdForUpdate($id);
+
+        if (${entity}Entity === null) {
+            return $this->rollbackAndFail(
+                message: "{ModuleName} not found with ID: {$id}",
+                errorCode: '{MODULE}_NOT_FOUND',
+            );
+        }
+
+        // Derived fields (slug, uploaded file) are applied through the DTO's with*() clones.
+        // When a file is uploaded, keep its stored path in $uploadedPath for cleanup.
+
+        // Business rules run INSIDE the Entity, which returns a NEW instance.
+        $updated{ModuleName}Entity = ${entity}Entity->applyChanges(/* from the DTO */);
+
+        $saved{ModuleName}Entity = $this->{entity}Repository->update($updated{ModuleName}Entity);
+
+        $this->transactionManager->commit();
+    } catch ({ModuleName}SlugConflictException $exception) {
+        return $this->rollbackAndFail(
+            message: $exception->getMessage(),
+            errorCode: '{MODULE}_SLUG_CONFLICT',
+            uploadedPath: $uploadedPath,
+        );
+    } catch (\Throwable $exception) {
+        $this->logger->error(
+            "Failed to update {module} [ID: {$id}]: " . $exception->getMessage(),
+            ['exception' => $exception],
+        );
+
+        return $this->rollbackAndFail(
+            message: "We couldn't update the {ModuleName} right now. Please try again.",
+            errorCode: '{MODULE}_UPDATE_ERROR',
+            uploadedPath: $uploadedPath,
+        );
+    }
+
+    // Committed. Side effects below are logged on failure and never undo the update.
+    $this->removeOldFileQuietly(/* old path, only if a new file replaced it */);
+    $this->dispatchEventsQuietly($updated{ModuleName}Entity);
+
+    return Result::success(
+        data: $this->responseMapper->toResponseDTO($saved{ModuleName}Entity),
+        message: "{ModuleName} updated successfully.",
+    );
+}
+
+private function rollbackAndFail(string $message, string $errorCode, ?string $uploadedPath = null): Result
+{
+    $this->transactionManager->rollback();
+    $this->removeFileQuietly($uploadedPath); // delete a newly uploaded, now-orphaned file
+
+    return Result::failure(message: $message, errorCode: $errorCode);
+}
+```
 
 ## Review Workflow
 
-1. Read files in this order: Controller → Service → Repository → BaseRepository.
-2. Check each layer against its checklist above, paying special attention to **the Service layer's transaction/rollback and file-cleanup sections** — this is where most bugs are found.
-3. Report findings by severity: 🔴 Critical (data integrity/transaction bug), 🟡 Design concern (TOCTOU, DRY, over-engineering).
-4. If the same bug class could plausibly occur in another module (Auth, Product, etc.), flag it and suggest adding it to **Agents.md's Known Bug Watchlist**.
+1. Read files in this order: Controller -> Command Service -> Entity -> Repository -> BaseRepository -> View.
+2. Check each layer against its checklist above, paying special attention to the **Command Service's transaction/rollback, row-lock, file-cleanup, and event sections**, where most bugs are found.
+3. Report findings by severity:
+    - 🔴 **Critical** (data integrity/transaction bug): early return without rollback, `findById()` instead of `findByIdForUpdate()` inside the transaction, domain exception falling through to the generic catch, orphaned or prematurely deleted file, events dispatched before commit, a cleanup failure reported as a failed update.
+    - 🟡 **Design concern:** business rule in the Service instead of the Entity, DRY violations, Entity/Model returned from the Service, ternary instead of guard clause, raw HTTP status in `errorCode`, framework import in Core.
+4. Tests are paused (`AGENTS.md` - UNIT TESTING POLICY): do not review, write, or require them.
+5. If the same bug class could plausibly occur in another module (Auth, Product, etc.), flag it and suggest adding it to this skill's Known Bug Watchlist.
 
 ## Notes
 
-- This skill is project-specific — written assuming a Clean/Hexagonal Architecture (Domain/Application/Infrastructure layers, Result Pattern, `PaginatedResult` in `Shared\Domain`).
-- When a new bug class is found, add it to the Known Bug Watchlist section above and update this skill, so future reviews don't miss it again.
+- This skill is project-specific: it assumes a Clean/Hexagonal Architecture (Domain/Application/Infrastructure layers, Rich Domain Model, Command/Query Service split, Result Pattern, `PaginatedResult` in `Shared\Domain`).
+- When a new bug class is found, add it to the Known Bug Watchlist above and update this skill, so future reviews don't miss it again.
+- Report only what you verified in the actual code. A review claim or checklist tick that the code does not support is a defect.

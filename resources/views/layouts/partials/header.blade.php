@@ -915,12 +915,13 @@
                                         class="t-link w-100 primary-nav-list__link primary-nav-list__link-has-menu text-capitalize">
                                         <div class="d-flex align-items-center">
                                             <span class="mx-user mx-user--sm">
-                                                <img src="assets/img/user.jpg" alt="max"
+                                                <img src="https://ui-avatars.com/api/?name={{ urlencode(auth()->user()?->name ?? 'Guest') }}&background=random"
+                                                    alt="{{ auth()->user()?->name ?? 'Guest' }}"
                                                     class="img-fluid w-100" />
                                             </span>
                                             <span
                                                 class="d-none d-lg-inline-block t-ml-8">
-                                                admin
+                                                {{ auth()->user()?->name ?? 'Guest' }}
                                                 <span
                                                     class="t-ml-5 d-inline-block xsm-text"
                                                     data-feather="chevron-down"></span>
@@ -934,11 +935,11 @@
                                                     class="mx-author-menu__link text-capitalize sm-text">
                                                     <span
                                                         class="text-capitalize fw-bold d-block t-pt-5">
-                                                        harun agrosz
+                                                        {{ auth()->user()?->name ?? 'Guest' }}
                                                     </span>
                                                     <span
                                                         class="text-capitalize xsm-text d-block mt-1">
-                                                        admin
+                                                        {{ auth()->user()?->email }}
                                                     </span>
                                                 </a>
                                                 <hr class="mx-hr bg-light m-0">
@@ -1009,22 +1010,27 @@
                                                     </div>
                                                 </a>
                                             </li>
+                                            {{-- logout is a POST route, so it needs a form rather than
+                                                 a plain link. --}}
                                             <li class="mx-author-menu__list">
-                                                <a href="#"
-                                                    class="mx-author-menu__link text-capitalize">
-                                                    <div
-                                                        class="d-flex align-items-center">
-                                                        <span
-                                                            class="xxlg-text t-mr-8 d-inline-block t-line-1">
-                                                            <i
-                                                                class='bx bx-log-out-circle'></i>
-                                                        </span>
-                                                        <span
-                                                            class="d-inline-block t-line-1 sm-text">
-                                                            logout
-                                                        </span>
-                                                    </div>
-                                                </a>
+                                                <form action="{{ route('logout') }}" method="POST">
+                                                    @csrf
+                                                    <button type="submit"
+                                                        class="mx-author-menu__link text-capitalize bg-transparent border-0 text-white w-100 text-start p-0">
+                                                        <div
+                                                            class="d-flex align-items-center">
+                                                            <span
+                                                                class="xxlg-text t-mr-8 d-inline-block t-line-1">
+                                                                <i
+                                                                    class='bx bx-log-out-circle'></i>
+                                                            </span>
+                                                            <span
+                                                                class="d-inline-block t-line-1 sm-text">
+                                                                logout
+                                                            </span>
+                                                        </div>
+                                                    </button>
+                                                </form>
                                             </li>
                                         </ul>
                                     </div>

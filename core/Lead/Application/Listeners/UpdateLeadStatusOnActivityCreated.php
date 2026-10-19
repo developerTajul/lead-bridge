@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Core\Lead\Application\Listeners;
 
 use Core\Lead\Application\DTOs\Requests\UpdateLeadStatusQueueDTO;
+use Core\Lead\Domain\Enums\LeadStatus;
 use Core\Activity\Domain\Events\ActivityCreatedEvent;
 use Core\Shared\Application\Contracts\QueueManagerContract;
 
@@ -27,7 +28,7 @@ final class UpdateLeadStatusOnActivityCreated
         if ($event->trackableType === self::LEAD_MORPH_ALIAS) {
             $queueData = new UpdateLeadStatusQueueDTO(
                 leadId: $event->trackableId,
-                status: 'contacted'
+                status: LeadStatus::CONTACTED
             );
 
             $this->queueManager->push('lead_status_update_topic', $queueData);

@@ -87,6 +87,16 @@ final class InvalidActivityException extends RuntimeException
     }
 
     /**
+     * Reports a trackable filter carrying only one half of the pair.
+     *
+     * @return self
+     */
+    public static function incompleteTrackableFilter(): self
+    {
+        return new self('A trackable filter needs both a type and an ID.');
+    }
+
+    /**
      * Reports a payload that both completes and reopens an activity.
      *
      * @return self

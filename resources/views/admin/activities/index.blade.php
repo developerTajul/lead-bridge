@@ -2,140 +2,213 @@
 
 @section('title', 'Activities')
 
-@section('header_title')
-    <h2 class="text-xl font-semibold text-gray-800">Activity Management</h2>
-@endsection
-
-@section('header_actions')
-    <a href="{{ route('admin.activities.create') }}" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center">
-        <i class="fa-solid fa-plus mr-1.5"></i> Add Activity
-    </a>
-@endsection
-
 @section('content')
-    <div class="p-6">
-        <div class="max-w-6xl bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="container-fluid px-3">
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="t-shadow t-bg-white p-4">
 
-            @if (session('success'))
-                <div class="m-6 mb-0 flex items-start gap-2 px-4 py-3 text-xs text-green-800 bg-green-50 border border-green-200 rounded-lg">
-                    <i class="fa-solid fa-circle-check mt-0.5"></i>
-                    <span>{{ session('success') }}</span>
-                </div>
-            @endif
+                    @if (session('success'))
+                        <div class="alert alert-success d-flex align-items-start gap-2 sm-text" role="alert">
+                            <i class="las la-check-circle xlg-text"></i>
+                            <span>{{ session('success') }}</span>
+                        </div>
+                    @endif
 
-            @if (session('error') || !empty($error))
-                <div class="m-6 mb-0 flex items-start gap-2 px-4 py-3 text-xs text-red-800 bg-red-50 border border-red-200 rounded-lg">
-                    <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
-                    <span>{{ session('error') ?? $error }}</span>
-                </div>
-            @endif
+                    @if (session('error') || !empty($error))
+                        <div class="alert alert-danger d-flex align-items-start gap-2 sm-text" role="alert">
+                            <i class="las la-exclamation-triangle xlg-text"></i>
+                            <span>{{ session('error') ?? $error }}</span>
+                        </div>
+                    @endif
 
-            @if (session('warning'))
-                <div class="m-6 mb-0 flex items-start gap-2 px-4 py-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
-                    <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
-                    <span>{{ session('warning') }}</span>
-                </div>
-            @endif
+                    {{-- The controller flashes this when a bookmark or hand-edited
+                         URL carried a filter value it had to drop. --}}
+                    @if (session('warning'))
+                        <div class="alert alert-warning d-flex align-items-start gap-2 sm-text" role="alert">
+                            <i class="las la-exclamation-circle xlg-text"></i>
+                            <span>{{ session('warning') }}</span>
+                        </div>
+                    @endif
 
-            <div class="px-6 pt-6 pb-4 border-b border-gray-100">
-                <div>
-                    <span class="px-2.5 py-1 text-xs font-semibold text-indigo-800 bg-indigo-50 rounded-md">activities Table</span>
-                    <h3 class="text-xl font-bold text-gray-800 mt-2">Activity List</h3>
-                    <p class="text-xs text-gray-500 mt-1">Calls, meetings, emails, and tasks logged against your records.</p>
-                </div>
-                <span class="inline-block mt-2 px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full">
-                    {{ $pagination->total }} total
-                </span>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                            <th class="px-6 py-3">ID</th>
-                            <th class="px-6 py-3">Subject</th>
-                            <th class="px-6 py-3">Type</th>
-                            <th class="px-6 py-3">Attached To</th>
-                            <th class="px-6 py-3">Due Date</th>
-                            <th class="px-6 py-3">Status</th>
-                            <th class="px-6 py-3 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100">
-                        @forelse ($activities as $activity)
-                            <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-3 text-xs text-gray-500 font-mono">{{ $activity->id }}</td>
-                                <td class="px-6 py-3 font-medium text-gray-800">
-                                    {{ $activity->subject }}
-                                    @if ($activity->description)
-                                        <p class="text-xs text-gray-500 font-normal mt-0.5">{{ Str::limit($activity->description, 60) }}</p>
-                                    @endif
-                                </td>
-                                <td class="px-6 py-3">
-                                    <span class="px-2 py-0.5 text-xs font-medium rounded-full
-                                        {{ $activity->type === 'call' ? 'bg-blue-100 text-blue-700' :
-                                           ($activity->type === 'meeting' ? 'bg-purple-100 text-purple-700' :
-                                           ($activity->type === 'email' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700')) }}">
-                                        {{ ucfirst($activity->type) }}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-3 text-xs text-gray-500">
-                                    {{-- A row may hold either the morph alias or a legacy class name. --}}
-                                    {{ class_basename(\Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($activity->trackable_type) ?? $activity->trackable_type) }} #{{ $activity->trackable_id }}
-                                </td>
-                                <td class="px-6 py-3 text-xs text-gray-500">
-                                    {{ $activity->due_date ?? '—' }}
-                                </td>
-                                <td class="px-6 py-3">
-                                    @if ($activity->completed_at)
-                                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Completed</span>
-                                    @else
-                                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">Open</span>
-                                    @endif
-                                </td>
-                                <td class="px-6 py-3">
-                                    <div class="flex items-center justify-end space-x-2">
-                                        {{-- PENDING ROUTES GUARD: edit/show/destroy routes do not exist yet --}}
-                                        <a href="#" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg transition-colors">Edit</a>
-                                        <a href="#" class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition-colors">Delete</a>
-                                    </div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="7" class="px-6 py-12 text-center">
-                                    <i class="fa-solid fa-list-check text-3xl text-gray-300 mb-3"></i>
-                                    <p class="text-sm text-gray-500">No activities found.</p>
-                                    <a href="{{ route('admin.activities.create') }}" class="inline-block mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
-                                        Log your first activity
-                                    </a>
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-
-            @if ($pagination->total > 0)
-                <div class="px-6 py-4 flex items-center justify-between border-t border-gray-100">
-                    <p class="text-xs text-gray-500">
-                        Showing page {{ $pagination->currentPage }} of {{ $pagination->lastPage }}
-                    </p>
-                    <div class="flex items-center space-x-2">
-                        @if ($pagination->currentPage > 1)
-                            <a href="{{ route('admin.activities.index', ['page' => $pagination->currentPage - 1, 'per_page' => $pagination->perPage]) }}" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors">
-                                <i class="fa-solid fa-arrow-left mr-1"></i> Prev
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="badge bg-primary text-uppercase sm-text">activities table</span>
+                            <h3 class="mt-2 mb-1 text-capitalize">Activity List</h3>
+                            <p class="mb-0 text-muted sm-text">Calls, meetings, emails, and tasks logged against your records.</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mt-3 mt-sm-0">
+                            <span class="badge rounded-pill bg-light text-dark sm-text">
+                                {{ $pagination->total }} total
+                            </span>
+                            <a href="{{ route('admin.activities.create') }}" class="btn btn-primary sm-text text-uppercase">
+                                log activity
                             </a>
-                        @endif
-                        @if ($pagination->currentPage < $pagination->lastPage)
-                            <a href="{{ route('admin.activities.index', ['page' => $pagination->currentPage + 1, 'per_page' => $pagination->perPage]) }}" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">
-                                Next <i class="fa-solid fa-arrow-right ml-1"></i>
-                            </a>
-                        @endif
+                        </div>
                     </div>
-                </div>
-            @endif
 
+                    <div class="table-responsive">
+                        <table class="table table-bordered t-text-dark--light-15 sm-text align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="text-center">#</th>
+                                    <th scope="col">Subject</th>
+                                    <th scope="col" class="text-center">Type</th>
+                                    <th scope="col">Attached To</th>
+                                    <th scope="col">Assigned</th>
+                                    <th scope="col">Due Date</th>
+                                    <th scope="col" class="text-center">Status</th>
+                                    <th scope="col" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($activities as $activity)
+                                    @php
+                                        // Bootstrap 5.0 has no text-bg-* helpers (they
+                                        // arrived in 5.1), so each badge pairs a bg-*
+                                        // with a text colour that stays readable on it.
+                                        $typeStyles = [
+                                            'call' => 'bg-primary text-white',
+                                            'meeting' => 'bg-info text-dark',
+                                            'email' => 'bg-warning text-dark',
+                                            'task' => 'bg-secondary text-white',
+                                        ];
+
+                                        // A row may hold either the morph alias or a
+                                        // legacy class name, so the alias is resolved
+                                        // to its model and reduced to a short label.
+                                        $trackableLabel = class_basename(
+                                            \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($activity->trackable_type)
+                                                ?? $activity->trackable_type
+                                        );
+
+                                        // Both relations are only present when eager
+                                        // loaded, so the name is read defensively and
+                                        // the type/id stands in when it is missing.
+                                        $trackableName = $activity->trackable['name'] ?? null;
+                                        $assignedName = $activity->user['name'] ?? null;
+                                    @endphp
+                                    <tr>
+                                        <th scope="row" class="text-center font-monospace text-muted">{{ $activity->id }}</th>
+                                        <td>
+                                            <div class="fw-semibold">{{ $activity->subject }}</div>
+                                            @if ($activity->description)
+                                                <div class="text-muted">{{ Str::limit($activity->description, 60) }}</div>
+                                            @endif
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge {{ $typeStyles[$activity->type] ?? 'bg-secondary text-white' }}">
+                                                {{ ucfirst($activity->type) }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if ($trackableName)
+                                                <div class="text-capitalize fw-semibold">{{ $trackableName }}</div>
+                                                <div class="text-muted">{{ $trackableLabel }} #{{ $activity->trackable_id }}</div>
+                                            @else
+                                                <span class="text-capitalize">{{ $trackableLabel }} #{{ $activity->trackable_id }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if ($assignedName)
+                                                {{ $assignedName }}
+                                            @elseif ($activity->user_id)
+                                                <span class="text-muted">User #{{ $activity->user_id }}</span>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-nowrap">
+                                            @if ($activity->due_date)
+                                                {{-- due_date arrives as an ISO-8601 string. The
+                                                     datetime attribute keeps the exact instant
+                                                     machine-readable while the label shows a
+                                                     date a person can read. --}}
+                                                <time datetime="{{ $activity->due_date }}">
+                                                    {{ \Illuminate\Support\Carbon::parse($activity->due_date)->format('M d, Y h:i A') }}
+                                                </time>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-center">
+                                            @if ($activity->completed_at)
+                                                <span class="badge bg-success text-white">Completed</span>
+                                            @else
+                                                <span class="badge bg-warning text-dark">Open</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            {{-- GUARD: the admin ActivityController only
+                                                 implements index, create and store, so show,
+                                                 edit and destroy have no controller method yet.
+                                                 These stay inert rather than pointing at a route
+                                                 that would fail. --}}
+                                            <ul class="t-list d-flex justify-content-center mb-0">
+                                                <li class="t-list__item">
+                                                    <a href="#" class="t-link t-link--alpha">
+                                                        <span class="d-flex align-items-center">
+                                                            <span class="xlg-text t-mr-5"><i class="las la-eye"></i></span>
+                                                            <span class="text-capitalize">view</span>
+                                                        </span>
+                                                    </a>
+                                                </li>
+                                                <li class="t-list__item">
+                                                    <a href="#" class="t-link t-link--alpha">
+                                                        <span class="d-flex align-items-center">
+                                                            <span class="xlg-text t-mr-5"><i class="las la-cog"></i></span>
+                                                            <span class="text-capitalize">edit</span>
+                                                        </span>
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="8" class="text-center py-5">
+                                            <i class="las la-tasks display-6 text-muted d-block mb-2"></i>
+                                            <p class="mb-0 text-muted">No activities found.</p>
+                                            <a href="{{ route('admin.activities.create') }}"
+                                               class="btn btn-primary sm-text text-uppercase mt-3">
+                                                log your first activity
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if ($pagination->total > 0)
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-3 border-top">
+                            <p class="mb-0 text-muted sm-text">
+                                Showing page {{ $pagination->currentPage }} of {{ $pagination->lastPage }}
+                                ({{ $pagination->total }} {{ Str::plural('activity', $pagination->total) }})
+                            </p>
+                            <div class="d-flex align-items-center gap-2">
+                                @if ($pagination->currentPage > 1)
+                                    {{-- The controller filters the list but never hands the
+                                         criteria to the view, so the current query string is
+                                         carried forward to keep the active criteria intact
+                                         across a page change. --}}
+                                    <a href="{{ route('admin.activities.index', array_merge(request()->query(), ['page' => $pagination->currentPage - 1])) }}"
+                                       class="btn btn-transparent btn-primary sm-text text-uppercase">
+                                        <i class="las la-arrow-left t-mr-5"></i>prev
+                                    </a>
+                                @endif
+                                @if ($pagination->currentPage < $pagination->lastPage)
+                                    <a href="{{ route('admin.activities.index', array_merge(request()->query(), ['page' => $pagination->currentPage + 1])) }}"
+                                       class="btn btn-primary sm-text text-uppercase">
+                                        next<i class="las la-arrow-right t-ml-5"></i>
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+
+                </div>
+            </div>
         </div>
     </div>
 @endsection

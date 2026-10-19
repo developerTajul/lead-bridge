@@ -23,6 +23,7 @@ final class LeadResponseMapper
     public function toResponseDTO(LeadProjectionDTO $projection): LeadResponseDTO
     {
         $entity = $projection->entity;
+        $status = $entity->getStatus();
 
         return new LeadResponseDTO(
             id: $entity->id,
@@ -30,8 +31,8 @@ final class LeadResponseMapper
             email: $entity->email,
             phone: $entity->phone,
             company_name: $entity->companyName,
-            status: $entity->status->value,
-            status_label: $entity->status->label(),
+            status: $status->value,
+            status_label: $status->label(),
             source: $entity->source,
             // Every datetime leaves on the same ISO-8601 wire format. The list
             // view reformats it for display; a client parses it as-is.

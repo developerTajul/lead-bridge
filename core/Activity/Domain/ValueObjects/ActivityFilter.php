@@ -22,8 +22,11 @@ final readonly class ActivityFilter
      * @param int|null            $userId
      * @param ActivityPeriod|null $period
      * @param int                 $perPage
+     * @param string|null         $trackableType Morph alias of the tracked record, e.g. "lead".
+     * @param int|null            $trackableId   ID of the tracked record.
      *
-     * @throws InvalidActivityException When the page size falls outside its bounds.
+     * @throws InvalidActivityException When the page size falls outside its bounds,
+     *                                  or a trackable pair is only half supplied.
      */
     public function __construct(
         public ?ActivityStatus $status = null,
@@ -31,9 +34,18 @@ final readonly class ActivityFilter
         public ?int $userId = null,
         public ?ActivityPeriod $period = null,
         public int $perPage = 15,
+        public ?string $trackableType = null,
+        public ?int $trackableId = null,
     ) {
         if ($perPage < ActivityRules::MIN_PER_PAGE || $perPage > ActivityRules::MAX_PER_PAGE) {
             throw InvalidActivityException::invalidPerPage($perPage);
+        }
+
+        // A half-supplied pair would silently widen the result set to every
+        // activity of that type, or every activity of that ID, so it is
+        // rejected here instead of being passed down as a partial filter.
+        if (($trackableType === null) !== ($trackableId === null)) {
+            throw InvalidActivityException::incompleteTrackableFilter();
         }
     }
 }

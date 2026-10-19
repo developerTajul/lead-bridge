@@ -63,6 +63,30 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
     }
 
     /**
+     * @param int $id
+     *
+     * @return LeadEntity|null
+     */
+    public function findEntityById(int $id): ?LeadEntity
+    {
+        $leadModel = $this->findRecord($id);
+
+        return $leadModel ? $this->mapper->toEntity($leadModel->toArray()) : null;
+    }
+
+    /**
+     * Persists the lead's current status.
+     *
+     * @param LeadEntity $lead
+     *
+     * @return void
+     */
+    public function saveStatus(LeadEntity $lead): void
+    {
+        $this->updateRecord($lead->id, ['status' => $lead->getStatus()->value]);
+    }
+
+    /**
      * @param LeadFilter $filter
      *
      * @return PaginatedResult Items are LeadProjectionDTO instances.

@@ -1,12 +1,10 @@
 <?php
 
-use App\Http\Controllers\Admin\ActivityController;
-use App\Http\Controllers\Admin\LeadController;
-use App\Http\Controllers\Api\CompanyController;
-use App\Http\Controllers\Api\ContactController;
-use App\Http\Controllers\Api\DealController;
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Web\Backend\ActivityController;
+use App\Http\Controllers\Web\Backend\AuthController;
+use App\Http\Controllers\Web\Backend\CompanyController;
+use App\Http\Controllers\Web\Backend\DashboardController;
+use App\Http\Controllers\Web\Backend\LeadController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -31,7 +29,5 @@ Route::middleware('auth')->group(function () {
         Route::resource('leads', LeadController::class);
         Route::resource('activities', ActivityController::class);
         Route::resource('companies', CompanyController::class);
-        Route::resource('contacts', ContactController::class);
-        Route::resource('deals', DealController::class);
     });
 });

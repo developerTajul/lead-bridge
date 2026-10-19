@@ -15,6 +15,7 @@ use Core\Activity\Domain\Contracts\ActivityRepositoryContract;
 use Core\Activity\Domain\Entities\ActivityEntity;
 use Core\Activity\Domain\Exceptions\InvalidActivityException;
 use Core\Activity\Domain\ValueObjects\ActivityFilter;
+use Core\Activity\Domain\ValueObjects\TrackableType;
 use Core\Shared\Application\DTOs\Result;
 use Core\Shared\Domain\Contracts\EventDispatcherContract;
 use Core\Shared\Domain\Contracts\TransactionManagerContract;
@@ -39,6 +40,8 @@ final class ActivityService
     private const ERROR_FETCH_FAILED = 'ACTIVITY_FETCH_FAILED';
 
     private const ERROR_INDEX_FAILED = 'ACTIVITY_INDEX_FAILED';
+
+    private const DEFAULT_PER_PAGE = 15;
 
     public function __construct(
         private readonly ActivityRepositoryContract $activityRepository,
@@ -150,6 +153,66 @@ final class ActivityService
         }
     }
 
+    /**
+     * Returns the paginated activity timeline of one tracked record.
+     *
+     * The alias is resolved against the module's own allowlist before it
+     * reaches the filter, so a caller cannot use this to read activities
+     * attached to an arbitrary morph type.
+     *
+     * @param string $trackableType Morph alias of the tracked record, e.g. "lead".
+     * @param int    $trackableId   ID of the tracked record.
+     * @param int    $perPage       Page size within the supported bounds.
+     *
+     * @return Result Contains the PaginatedResult of ActivityResponseDTO on success.
+     */
+    public function getActivitiesForTrackable(
+        string $trackableType,
+        int $trackableId,
+        int $perPage = self::DEFAULT_PER_PAGE
+    ): Result {
+        try {
+            $alias = TrackableType::fromString($trackableType)->toString();
+
+            $activityFilter = new ActivityFilter(
+                trackableType: $alias,
+                trackableId: $trackableId,
+                perPage: $perPage,
+            );
+        } catch (InvalidActivityException $exception) {
+            // A rejected alias or page size is bad input, not a system failure.
+            $this->logger->warning('Activity timeline rejected its criteria.', [
+                'trackable_type' => $trackableType,
+                'trackable_id' => $trackableId,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return Result::failure($exception->getMessage(), self::ERROR_INVALID);
+        }
+
+        try {
+            $paginatedActivities = $this->activityQuery->getFilteredActivities($activityFilter);
+
+            // Mapped through the existing response mapper, so both read paths
+            // produce the same wire shape.
+            $mappedPaginatedResult = $paginatedActivities->map(
+                fn(ActivityProjectionDTO $projection) => $this->activityResponseMapper->toResponseDTO($projection)
+            );
+
+            return Result::success(
+                data: $mappedPaginatedResult,
+                message: 'Activities retrieved successfully.',
+            );
+        } catch (\Throwable $exception) {
+            $this->logger->error('Failed to retrieve the activity timeline.', [
+                'trackable_type' => $trackableType,
+                'trackable_id' => $trackableId,
+                'exception' => $exception,
+            ]);
+
+            return Result::failure('Failed to retrieve activities.', self::ERROR_INDEX_FAILED);
+        }
+    }
 
 
     public function getActivityById(int $id): Result

@@ -1,16 +1,17 @@
 <?php
 
-use App\Http\Controllers\Api\ActivityController;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\CompanyController;
-use App\Http\Controllers\Api\ContactController;
-use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\DealController;
-use App\Http\Controllers\Api\LeadCaptureController;
-use App\Http\Controllers\Api\LeadController;
-use App\Http\Controllers\Api\LeadConversionController;
-use App\Http\Controllers\Api\PipelineController;
-use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\V1\ActivityController;
+use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CompanyController;
+use App\Http\Controllers\Api\V1\ContactController;
+use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\DealController;
+use App\Http\Controllers\Api\V1\LeadCaptureController;
+use App\Http\Controllers\Api\V1\LeadActivityController;
+use App\Http\Controllers\Api\V1\LeadController;
+use App\Http\Controllers\Api\V1\LeadConversionController;
+use App\Http\Controllers\Api\V1\PipelineController;
+use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -29,6 +30,8 @@ Route::prefix('v1')->group(function () {
         // Update and delete have no use case on the lead service yet, so the
         // resource exposes only the three actions that are implemented.
         Route::apiResource('leads', LeadController::class)->only(['index', 'show', 'store']);
+        Route::patch('leads/{lead}/status', [LeadController::class, 'updateStatus']);
+        Route::get('leads/{lead}/activities', [LeadActivityController::class, 'index']);
         Route::post('leads/{lead}/convert', [LeadConversionController::class, 'convert']);
         Route::get('pipelines/{pipeline}/kanban', [PipelineController::class, 'kanban']);
         Route::get('dashboard/metrics', [DashboardController::class, 'metrics']);

@@ -11,6 +11,7 @@ use Core\Lead\Application\DTOs\Requests\LeadFilterDTO;
 use Core\Lead\Application\DTOs\Responses\LeadProjectionDTO;
 use Core\Lead\Application\Mappers\LeadResponseMapper;
 use Core\Lead\Domain\Contracts\LeadRepositoryContract;
+use Core\Lead\Domain\Enums\LeadStatus;
 use Core\Lead\Domain\Exceptions\InvalidLeadException;
 use Core\Lead\Domain\ValueObjects\LeadFilter;
 use Core\Shared\Application\Contracts\QueueManagerContract;
@@ -121,7 +122,7 @@ final class LeadService implements LeadServiceInterface
     public function createLead(LeadCreateDTO $leadCreateDTO): Result
     {
         try {
-            $existingLead = $this->leadRepository->findByEmail($leadCreateDTO->email) 
+            $existingLead = $this->leadRepository->findByEmail($leadCreateDTO->email)
                         ?? $this->leadRepository->findByPhone($leadCreateDTO->phone);
 
             if ($existingLead) {
@@ -129,7 +130,7 @@ final class LeadService implements LeadServiceInterface
                     message: 'This lead already exists in our system.',
                     errorCode: 'LEAD_ALREADY_EXISTS'
                 );
-            }            
+            }
 
             $leadData = new LeadData(
                 name: $leadCreateDTO->name,
@@ -149,5 +150,33 @@ final class LeadService implements LeadServiceInterface
                 errorCode: 'LEAD_CREATE_FAILED',
             );
         }
+    }
+
+    /**
+     * Moves a lead to a new status, letting the domain entity decide whether
+     * the change is allowed.
+     *
+     * @param int        $leadId
+     * @param LeadStatus $status
+     *
+     * @return Result Contains the LeadEntity on success.
+     */
+    public function changeStatus(int $leadId, LeadStatus $status): Result
+    {
+        $lead = $this->leadRepository->findEntityById($leadId);
+
+        if ($lead === null) {
+            return Result::failure('Lead not found.', self::ERROR_NOT_FOUND);
+        }
+
+        try {
+            $lead->transitionTo($status);
+        } catch (InvalidLeadException $e) {
+            return Result::failure($e->getMessage(), self::ERROR_INVALID);
+        }
+
+        $this->leadRepository->saveStatus($lead);
+
+        return Result::success(data: $lead, message: 'Lead status updated successfully.');
     }
 }

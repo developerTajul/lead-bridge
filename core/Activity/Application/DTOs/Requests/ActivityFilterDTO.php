@@ -18,6 +18,8 @@ final readonly class ActivityFilterDTO
         public ?ActivityType $type = null,
         public ?int $userId = null,
         public ?ActivityPeriod $filter = null,
-        public int $perPage = 15
+        public int $perPage = 15,
+        public ?string $trackableType = null,
+        public ?int $trackableId = null
     ) {}
 }

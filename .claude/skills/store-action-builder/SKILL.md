@@ -1,56 +1,121 @@
+---
+name: store-action-builder
+description: Implements the store (create form submit / POST) action for an existing module - FormRequest, Request DTO, Request Mapper and its contract, POST route, controller store(), and form action binding. Use when asked to add or implement the store/save action for a module.
+---
+
 # Store Action Builder Skill (Data Persistence Use-Case)
 
 ## Description
 
-This skill safely implements the data-saving workflow (Form Submit/POST) for an existing module. It generates request validation, DTOs, and injects the `store()` method along with the corresponding POST route without destructively overwriting existing delivery layer code.
+This skill safely implements the data-saving workflow (Form Submit/POST) for an existing module. It generates request validation, the Request DTO, the Request Mapper with its contract, and appends the `store()` method with its POST route, without destructively overwriting existing delivery-layer code.
+
+> **This work follows the Rich Domain Model.** Business rules (valid state, invariants, derived values) live in the Entity, never in the FormRequest, Controller, or Service. The store action is a **write** use case, so it goes through the Command Service. Read `AGENTS.md`, and load `.claude/rules/04-crud-pipeline.txt`, `05-rich-domain-and-services.txt`, and `06-ports-and-portability.txt` before writing code.
+
+**Placeholders used in this skill:**
+
+| Placeholder    | Meaning                               | Example                        |
+| -------------- | ------------------------------------- | ------------------------------ |
+| `{ModuleName}` | PascalCase module name                | `Category`, `Product`, `Brand` |
+| `{module}`     | lowercase/plural route & view segment | `categories`, `products`       |
+| `{entity}`     | camelCase singular variable name      | `category`, `product`, `brand` |
+| `{MODULE}`     | UPPER_SNAKE_CASE error-key prefix     | `CATEGORY`, `PRODUCT`, `BRAND` |
 
 ## Context & Rules
 
-- **Source of Truth:** Analyze the provided SQL database schema to formulate exact validation rules.
-- **Non-Destructive Policy (Safe Append):** You MUST NOT overwrite, modify, or delete existing constructors, injected dependencies, or methods in the Controller. You will only APPEND the new `store()` method.
-- **Separation of Concerns (Hexagonal Architecture):** The HTTP Controller must remain thin. It should only validate the request, map it to a DTO, delegate the execution to the relevant Service layer, and return a redirect response.
-- **Route Binding:** Once the `store` route is defined, you MUST update the corresponding `create.blade.php` form action from `action="#"` to `action="{{ route('admin.[module].store') }}"`.
+- **Source of Truth:** Analyze the provided SQL database schema to formulate the exact fields and validation rules. Skip primary keys, auto-managed timestamps, soft deletes, and domain-generated fields (`slug`, `uuid`, `token`). Never invent fields.
+- **Non-Destructive Policy (Safe Append):** You MUST NOT overwrite, modify, reorder, or delete existing methods, routes, bindings, or injected dependencies. You only APPEND. If the Controller does not yet receive the Command Service or the MapperContract, append them as new promoted parameters at the END of the existing constructor. Never reorder or remove existing parameters, and list each addition in your report.
+- **Separation of Concerns (Hexagonal Architecture):** The HTTP Controller stays thin: validate (FormRequest) -> Mapper builds the DTO -> ONE Command Service method -> translate the `Result` into a redirect. It never calls the Repository and never contains a business rule.
+- **Command Service dependency (verify first):** The Controller calls `{ModuleName}CommandService::create{ModuleName}(DTO)`. Before writing anything, verify that this method exists and read its real signature. If it does not exist, stop and tell the developer. Build the Service, Entity, and Repository side only if the prompt explicitly asks for it, following 04 (STEP 2-3) and 05.
+- **Domain error keys:** The Service's `Result` `errorCode` holds domain keys (e.g. `{MODULE}_SLUG_CONFLICT`), never raw HTTP statuses.
+- **Core stays framework-free:** No `Illuminate\*` import in `core/` Domain/Application. The FormRequest and Controller are delivery code under `app/`. The Request DTO and the MapperContract live in Core.
+- **Route Binding:** Once the `store` route is defined, update the `create.blade.php` form action from `action="#"` to the named route.
 
 ## Execution Steps
 
-1. **Request Validation (`App\Http\Requests\Admin\`):**
-    - Generate a standard Laravel FormRequest class (e.g., `[Module]StoreRequest`).
-    - Define validation rules strictly matching the database schema (e.g., `required`, `string`, `max:255`, `unique`, `image`).
+1. **Request Validation (`App\Http\Requests\Admin\{ModuleName}StoreRequest`):**
+    - Generate a standard Laravel FormRequest.
+    - Define rules strictly matching the schema: presence and type (`required`, `string`, `max:255`, `numeric`, `image`, `nullable`). For enum columns use `Rule::in({ModuleName}Status::values())` (or the module's real enum).
     - Authorize the request by returning `true`.
+    - FormRequests carry validation rules only. They must not persist or transform data, and they must not duplicate a business rule that belongs in the Entity.
+    - Uniqueness is a business rule enforced by the Command Service (a domain conflict exception becomes `Result::failure`). Do NOT add `unique:` rules unless the existing modules in this codebase already do. Verify and follow them.
 
-2. **DTO Generation (`Core\[Module]\Application\DTOs\`):**
-    - Create a `readonly class` Data Transfer Object (e.g., `[Module]CreateDTO`) to ferry the validated data from the Request to the Service layer.
+2. **Request DTO Generation (`Core\{ModuleName}\Application\DTOs\Requests\{ModuleName}CreateDTO`):**
+    - Create it as an immutable `readonly class` with a constructor of promoted `readonly` properties ONLY.
+    - NO static factory methods (`fromArray()`, `fromRequest()`, `fromValidated()`...) and nothing that depends on a framework request structure. All translation happens in the Request Mapper.
+    - Properties for uploaded files MUST be typed `mixed`, never `Illuminate\Http\UploadedFile` or any framework type.
+    - Add one immutable `with*()` clone for each derived/deferred field that exists in the schema (`withSlug(string $slug): self` for a `slug` column, `withStoreImage(string $path): self` or `withLogo(...)` for an image/file column). Each returns a NEW instance with every promoted property re-passed by name. Never mutate in place.
+    - Consistency guard: a `with*()` clone may only reference properties the constructor really declares. Keep the property list, the Mapper, and every clone in step.
 
-3. **Safe Route Injection (`routes/web.php`):**
-    - Provide the POST routing snippet to be appended directly below the existing GET route.
-    - Map the POST request to the Controller's `store` method.
+3. **Request Mapper and Contract:**
+    - Contract: `Core\{ModuleName}\Application\Contracts\{ModuleName}MapperContract` with `mapToCreateDTO(array $validatedData): {ModuleName}CreateDTO`. The parameter is a plain `array` named `$validatedData`. NEVER type-hint a FormRequest or any framework class.
+    - Adapter: `Core\{ModuleName}\Application\Mappers\{ModuleName}Mapper`, a `final class` implementing the contract. It builds the DTO with named arguments and is the ONLY place that translates request data to the DTO. An uploaded file lands on a `mixed` property (`$validatedData['image'] ?? null`).
+    - If the contract and mapper already exist, append the `mapToCreateDTO` method and leave the rest untouched.
+    - Bind the contract to the adapter once in `app/Providers/AppServiceProvider.php` (append only). Do not rebind anything that already exists.
 
-4. **Safe Controller Injection (`App\Http\Controllers\Admin\`):**
+4. **Safe Route Injection (`routes/web.php`):**
+    - Routes use `Route::resource()` inside the existing middleware/prefix/name group. Do NOT hand-write a `Route::post(...)` line.
+    - If the module's resource is registered with `->only([...])`, add `'store'` to it. If it uses `->except([...])`, remove `'store'` from it. If it has no restriction, change nothing.
+
+```php
+Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
+    Route::resource('{module}', {ModuleName}Controller::class)->only(['create', 'store']);
+});
+```
+
+    This yields `POST /admin/{module}` named `admin.{module}.store`.
+
+5. **Safe Controller Injection (`App\Http\Controllers\Admin\{ModuleName}Controller`):**
 
     **CONSTRUCTOR INJECTION MANDATE (STRICT):**
-    - The Controller's `__construct()` MUST receive the Module Service (e.g., `CategoryService`) AND the ModuleMapperContract (e.g., `CategoryMapperContract`).
-    - The `store()` method MUST receive ONLY the FormRequest (e.g., `CategoryStoreRequest $request`).
-    - ALL other class dependencies (including MapperContract and Services) MUST be injected via the constructor, NOT via method parameters.
-    - If the MapperContract is not already in the constructor, you MUST modify the existing constructor to inject it.
-    - **MAPPER VARIABLE NAMING RULE (STRICT):** Controllers MUST use `$mapper` as the variable name for the injected ModuleMapperContract dependency (e.g., `private readonly CategoryMapperContract $mapper`). This convention keeps constructor signatures clean and controller code fluent.
+    - The Controller's `__construct()` MUST receive `{ModuleName}CommandService` AND `{ModuleName}MapperContract`. Add whichever is missing as appended promoted parameters.
+    - `store()` receives ONLY the FormRequest. ALL other dependencies are constructor-injected, never method-injected.
+    - **MAPPER VARIABLE NAMING RULE (STRICT):** the injected mapper is always named `$mapper` (e.g. `private readonly {ModuleName}MapperContract $mapper`).
+    - Use semantic names for the Service (`${entity}CommandService`) and the DTO (`${entity}CreateDTO`), never `$dto` or `$coupons`.
 
     **SEMANTIC NAMING (STRICT):**
-    - The Mapper method for create use cases MUST be named `mapToCreateDTO`.
-    - It MUST accept a plain array parameter named `$validatedData`.
+    - The mapper method is `mapToCreateDTO`, accepting a plain array named `$validatedData`.
     - The Controller calls `$this->mapper->mapToCreateDTO($request->validated())`.
 
     **Implementation:**
-    - Inside `store()`: the DTO is built using `$this->mapper->mapToCreateDTO($request->validated())`.
-    - Maps to DTO via the already-injected Mapper, delegates to Service, and returns a redirect.
+    - Append only the `store()` method. Build the DTO through the mapper, call ONE Command Service method, and use a guard clause (no ternary) on `$result->isFailure()`.
+    - On failure: `back()->with('error', $result->message)->withInput()`.
+    - On success: redirect to `admin.{module}.index` with the success message. Verify first that this route exists in `routes/web.php`. If it does not, redirect to `admin.{module}.create` instead and flag it in your report. Never redirect to a missing route.
+    - Never catch exceptions in the Controller.
 
-5. **View Update:**
-    - Provide the snippet to update the form `action` attribute in `resources/views/admin/[module]/create.blade.php` to use the named route `admin.[module].store`.
+6. **View Update (`resources/views/backend/pages/{module}/create.blade.php`):**
+    - Use the project's real views directory (the one that holds `index.blade.php`). Verify it, do not guess.
+    - Change the form `action` from `#` to `{{ route('admin.{module}.store') }}`, keep `method="POST"` and `@csrf`, and remove the "store route not defined yet" reminder block left by the form scaffold.
+    - Keep `enctype="multipart/form-data"` if and only if the schema has file/image columns. Change nothing else in the view.
+
+## Unit Tests (moved to rule 07 - paused)
+
+Testing is paused (`AGENTS.md` - UNIT TESTING POLICY). Do not write or claim tests. Test requirements live in `.claude/rules/07-testing.txt`, which is loaded only when the developer asks for tests.
+
+## Verification Checklist (fill in only from what the generated code actually contains)
+
+Claim only what you can point to in the code. A false claim is a defect.
+
+- [ ] The Command Service method this action calls exists, and its real signature was read, not assumed.
+- [ ] No existing method, route, binding, or constructor parameter was overwritten, reordered, or removed. Each appended constructor parameter is listed in the report.
+- [ ] FormRequest rules match the schema, skip PK/timestamps/domain-generated fields, and contain no business rule.
+- [ ] Request DTO is in `Application/DTOs/Requests/`, is a `readonly class` with promoted properties only, has NO static factory, types uploaded files `mixed`, and has a `with*()` clone for each derived field that exists in the schema.
+- [ ] The MapperContract accepts a plain `array $validatedData`, and the Mapper is the only place that builds the DTO from request data.
+- [ ] Route uses `Route::resource()` inside the existing group, with no hand-written `Route::post` line.
+- [ ] Controller receives the Command Service and `$mapper` through the constructor, `store()` takes only the FormRequest, and a guard clause is used instead of a ternary.
+- [ ] The success redirect target route exists (verified), or the fallback was used and flagged.
+- [ ] No framework import in Core; the contract is named `...Contract`; the binding was appended once.
+- [ ] The form action uses `route('admin.{module}.store')`, with `@csrf`, and `enctype` present only if the schema has file/image columns.
+- [ ] Namespaces, imports, and signatures (`Result`, mapper, Service) were verified against the codebase, not guessed.
+- Unit tests are paused (`AGENTS.md` - UNIT TESTING POLICY). Do not write or claim them.
+- [ ] After adding files under a new namespace path, run `composer dump-autoload`.
 
 ## Output
 
-Deliver the generated code components cleanly. You MUST wrap each code component inside standard markdown code blocks (using backticks like `php` and `html`) to strictly preserve line breaks, indentation, and formatting.
+Deliver the generated code components cleanly. You MUST wrap each code component inside standard markdown code blocks (using backticks with the language, such as `php` and `blade`) to strictly preserve line breaks, indentation, and formatting. Keep conversational text to a minimum, and end with the filled-in verification checklist.
 
 ## Canonical Controller Pattern (Constructor Injection)
+
+The example uses the Category module. Replace names with the module's real ones, and verify every import against the codebase.
 
 ```php
 <?php
@@ -60,32 +125,37 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Core\Coupon\Application\Contracts\CouponMapperContract;
-use Core\Coupon\Application\Services\CouponService;
+use App\Http\Requests\Admin\CategoryStoreRequest;
+use Core\Category\Application\Contracts\CategoryMapperContract;
+use Core\Category\Application\Services\CategoryCommandService;
 use Illuminate\Http\RedirectResponse;
 
 final class CategoryController extends Controller
 {
-    // BOTH Service and MapperContract injected via CONSTRUCTOR
+    // Service and MapperContract are injected via the CONSTRUCTOR.
     public function __construct(
-        private readonly CouponService $coupons,
-        private readonly CouponMapperContract $mapper  // NOTE: always $mapper
+        private readonly CategoryCommandService $categoryCommandService,
+        private readonly CategoryMapperContract $mapper, // NOTE: always $mapper
     ) {}
 
-    // ONLY the FormRequest is passed to the action method
+    /**
+     * Saves the new category.
+     */
     public function store(CategoryStoreRequest $request): RedirectResponse
     {
-        // Pass VALIDATED ARRAY to keep Core framework-agnostic
+        // Pass the VALIDATED ARRAY (not the request object) to keep Core framework-agnostic.
         $categoryCreateDTO = $this->mapper->mapToCreateDTO($request->validated());
-        $result = $this->coupons->createCategory($categoryCreateDTO);
+        $result = $this->categoryCommandService->createCategory($categoryCreateDTO);
 
-        return $result->isFailure()
-            ? back()->with('error', $result->message)->withInput()
-            : redirect()->route('admin.categories.index')->with('success', $result->message);
+        if ($result->isFailure()) {
+            return back()->with('error', $result->message)->withInput();
+        }
+
+        return redirect()->route('admin.categories.index')->with('success', $result->message);
     }
 }
 ```
 
 **Do NOT inject the MapperContract directly into the `store()` method signature. The only exception to constructor-only injection is the HTTP FormRequest itself.**
 
-**Framework-Agnostic Rule:** The MapperContract in the Core Application Layer MUST accept a plain `array` (parameter named `$validatedData`) - NEVER type-hint a Laravel FormRequest. The Controller passes `$request->validated()` to the mapper.
+**Framework-Agnostic Rule:** The MapperContract in the Core Application Layer MUST accept a plain `array` (parameter named `$validatedData`). NEVER type-hint a Laravel FormRequest. The Controller passes `$request->validated()` to the mapper.
