@@ -5,124 +5,207 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Contact;
+use App\Http\Requests\Api\V1\IndexContactRequest;
+use App\Http\Requests\Api\V1\StoreContactRequest;
+use App\Http\Requests\Api\V1\UpdateContactRequest;
+use Core\Contact\Application\Contracts\ContactMapperContract;
+use Core\Contact\Application\Services\ContactQueryService;
+use Core\Contact\Application\Services\ContactService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 
 final class ContactController extends Controller
 {
+    private const ERROR_INVALID = 'CONTACT_INVALID';
+
+    private const ERROR_NOT_FOUND = 'CONTACT_NOT_FOUND';
+
+    /**
+     * @param ContactService        $contactService
+     * @param ContactQueryService   $contactQueryService
+     * @param ContactMapperContract $mapper
+     */
+    public function __construct(
+        private readonly ContactService $contactService,
+        private readonly ContactQueryService $contactQueryService,
+        private readonly ContactMapperContract $mapper,
+    ) {}
+
     /**
      * Display a listing of contacts.
+     *
+     * @param IndexContactRequest $request
+     *
+     * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
+    public function index(IndexContactRequest $request): JsonResponse
     {
-        $query = Contact::with(['companies']);
-
-        if ($request->filled('search')) {
-            $search = (string) $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%");
-            });
+        // An API client sends the filters it means, so an unusable one is a
+        // client error rather than something to silently drop.
+        try {
+            $contactFilterDTO = $this->mapper->mapToFilterDTO($request->query());
+        } catch (InvalidArgumentException $exception) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $exception->getMessage(),
+                'error_code' => self::ERROR_INVALID,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $contacts = $query->latest()->paginate(15);
+        $result = $this->contactQueryService->getPaginatedContacts($contactFilterDTO);
+
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->getMessage(),
+                'error_code' => $result->errorCode,
+            ], $this->errorStatus($result->errorCode));
+        }
+
+        $paginatedContacts = $result->getData();
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Contacts retrieved successfully.',
-            'data'    => $contacts,
+            'status' => 'success',
+            'message' => $result->getMessage(),
+            'data' => $paginatedContacts->items,
+            'meta' => [
+                'total' => $paginatedContacts->total,
+                'current_page' => $paginatedContacts->currentPage,
+                'per_page' => $paginatedContacts->perPage,
+                'last_page' => $paginatedContacts->lastPage,
+            ],
         ], Response::HTTP_OK);
     }
 
     /**
      * Store a newly created contact (with optional company linkage).
+     *
+     * @param StoreContactRequest $request
+     *
+     * @return JsonResponse
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreContactRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name'        => ['required', 'string', 'max:255'],
-            'email'       => ['required', 'string', 'email', 'max:255', 'unique:contacts,email'],
-            'phone'       => ['nullable', 'string', 'max:50'],
-            'company_id'  => ['nullable', 'integer', 'exists:companies,id'],
-            'job_title'   => ['nullable', 'string', 'max:255'],
-            'is_primary'  => ['nullable', 'boolean'],
-        ]);
+        $storeContactDTO = $this->mapper->mapToStoreDTO($request->validated());
 
-        $contact = DB::transaction(function () use ($validated): Contact {
-            $newContact = Contact::create([
-                'name'  => $validated['name'],
-                'email' => $validated['email'],
-                'phone' => $validated['phone'] ?? null,
-            ]);
+        $result = $this->contactService->createContact($storeContactDTO);
 
-            if (! empty($validated['company_id'])) {
-                $newContact->companies()->attach($validated['company_id'], [
-                    'job_title'  => $validated['job_title'] ?? null,
-                    'is_primary' => $validated['is_primary'] ?? false,
-                ]);
-            }
-
-            return $newContact;
-        });
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->message,
+                'error_code' => $result->errorCode,
+            ], $this->errorStatus($result->errorCode));
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Contact created successfully.',
-            'data'    => $contact->load(['companies']),
+            'status' => 'success',
+            'message' => $result->message,
+            'data' => $result->getData(),
         ], Response::HTTP_CREATED);
     }
 
     /**
-     * Display the specified contact.
+     * Maps a domain error code to the HTTP status the client should see.
+     * A broken contact invariant is a validation failure, not a bad request.
+     *
+     * @param string|null $errorCode
+     *
+     * @return int
      */
-    public function show(Contact $contact): JsonResponse
+    private function errorStatus(?string $errorCode): int
     {
+        if ($errorCode === self::ERROR_INVALID) {
+            return Response::HTTP_UNPROCESSABLE_ENTITY;
+        }
+
+        return Response::HTTP_BAD_REQUEST;
+    }
+
+    /**
+     * Display the specified contact.
+     *
+     * @param string $id
+     *
+     * @return JsonResponse
+     */
+    public function show(string $id): JsonResponse
+    {
+        $result = $this->contactQueryService->getContactDetails($id);
+
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->message,
+                'error_code' => $result->errorCode,
+            ], $result->errorCode === self::ERROR_NOT_FOUND
+                ? Response::HTTP_NOT_FOUND
+                : $this->errorStatus($result->errorCode));
+        }
+
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Contact retrieved successfully.',
-            'data'    => $contact->load(['companies', 'activities']),
+            'status' => 'success',
+            'message' => $result->message,
+            'data' => $result->getData(),
         ], Response::HTTP_OK);
     }
 
     /**
-     * Update the specified contact with row locking.
+     * Update the specified contact.
+     *
+     * @param UpdateContactRequest $request
+     * @param string               $id
+     *
+     * @return JsonResponse
      */
-    public function update(Request $request, Contact $contact): JsonResponse
+    public function update(UpdateContactRequest $request, string $id): JsonResponse
     {
-        $validated = $request->validate([
-            'name'  => ['sometimes', 'required', 'string', 'max:255'],
-            'email' => ['sometimes', 'required', 'string', 'email', 'max:255', 'unique:contacts,email,' . $contact->id],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
-        ]);
+        $updateContactDTO = $this->mapper->mapToUpdateDTO((int) $id, $request->validated());
 
-        $updatedContact = DB::transaction(function () use ($contact, $validated): Contact {
-            $record = Contact::where('id', $contact->id)->lockForUpdate()->firstOrFail();
-            $record->update($validated);
+        $result = $this->contactService->updateContact($updateContactDTO);
 
-            return $record;
-        });
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->message,
+                'error_code' => $result->errorCode,
+            ], $result->errorCode === self::ERROR_NOT_FOUND
+                ? Response::HTTP_NOT_FOUND
+                : $this->errorStatus($result->errorCode));
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Contact updated successfully.',
-            'data'    => $updatedContact->fresh(['companies']),
+            'status' => 'success',
+            'message' => $result->message,
+            'data' => $result->getData(),
         ], Response::HTTP_OK);
     }
 
     /**
      * Remove the specified contact.
+     *
+     * @param string $id
+     *
+     * @return JsonResponse
      */
-    public function destroy(Contact $contact): JsonResponse
+    public function destroy(string $id): JsonResponse
     {
-        $contact->delete();
+        $result = $this->contactService->deleteContact((int) $id);
+
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->message,
+                'error_code' => $result->errorCode,
+            ], $result->errorCode === self::ERROR_NOT_FOUND
+                ? Response::HTTP_NOT_FOUND
+                : $this->errorStatus($result->errorCode));
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Contact deleted successfully.',
+            'status' => 'success',
+            'message' => $result->message,
         ], Response::HTTP_OK);
     }
 }

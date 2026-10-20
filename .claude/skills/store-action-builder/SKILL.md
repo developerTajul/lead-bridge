@@ -7,9 +7,9 @@ description: Implements the store (create form submit / POST) action for an exis
 
 ## Description
 
-This skill safely implements the data-saving workflow (Form Submit/POST) for an existing module. It generates request validation, the Request DTO, the Request Mapper with its contract, and appends the `store()` method with its POST route, without destructively overwriting existing delivery-layer code.
+This skill safely implements the data-saving workflow (Form Submit/POST) for an existing module. It generates request validation, the Request DTO, the Request Mapper with its contract, and appends the `store()` method with its POST route, without destructively overwriting existing delivery-layer code. It also builds the use-case side that the action depends on (Entity `create()`, Repository `create()`, Command Service `create{ModuleName}`) when it does not exist yet, so the action works end to end, like the delete, edit, and update skills.
 
-> **This work follows the Rich Domain Model.** Business rules (valid state, invariants, derived values) live in the Entity, never in the FormRequest, Controller, or Service. The store action is a **write** use case, so it goes through the Command Service. Read `AGENTS.md`, and load `.claude/rules/04-crud-pipeline.txt`, `05-rich-domain-and-services.txt`, and `06-ports-and-portability.txt` before writing code.
+> **This work follows the Rich Domain Model.** Business rules (valid state, invariants, derived values) live in the Entity, never in the FormRequest, Controller, or Service. The store action is a **write** use case, so it goes through the Command Service. Read `AGENTS.md`, and load `.claude/rules/02-framework-adapter-laravel.txt` (route and Eloquent mapping rules), `04-crud-pipeline.txt`, `05-rich-domain-and-services.txt`, `06-ports-and-portability.txt`, and `08-events-and-queues.txt` before writing code.
 
 **Placeholders used in this skill:**
 
@@ -23,9 +23,9 @@ This skill safely implements the data-saving workflow (Form Submit/POST) for an 
 ## Context & Rules
 
 - **Source of Truth:** Analyze the provided SQL database schema to formulate the exact fields and validation rules. Skip primary keys, auto-managed timestamps, soft deletes, and domain-generated fields (`slug`, `uuid`, `token`). Never invent fields.
-- **Non-Destructive Policy (Safe Append):** You MUST NOT overwrite, modify, reorder, or delete existing methods, routes, bindings, or injected dependencies. You only APPEND. If the Controller does not yet receive the Command Service or the MapperContract, append them as new promoted parameters at the END of the existing constructor. Never reorder or remove existing parameters, and list each addition in your report.
+- **Non-Destructive Policy (Safe Append):** You MUST NOT overwrite, modify, reorder, or delete existing methods, routes, bindings, or injected dependencies. You only APPEND. The one sanctioned exception: widening an Entity's `int $id` to `?int` (Step 4), and only when the Entity still has the old non-nullable type. If the Controller does not yet receive the Command Service or the MapperContract, append them as new promoted parameters at the END of the existing constructor. Never reorder or remove existing parameters, and list each addition in your report.
 - **Separation of Concerns (Hexagonal Architecture):** The HTTP Controller stays thin: validate (FormRequest) -> Mapper builds the DTO -> ONE Command Service method -> translate the `Result` into a redirect. It never calls the Repository and never contains a business rule.
-- **Command Service dependency (verify first):** The Controller calls `{ModuleName}CommandService::create{ModuleName}(DTO)`. Before writing anything, verify that this method exists and read its real signature. If it does not exist, stop and tell the developer. Build the Service, Entity, and Repository side only if the prompt explicitly asks for it, following 04 (STEP 2-3) and 05.
+- **Vertical slice (build what is missing):** The Controller calls `{ModuleName}CommandService::create{ModuleName}(DTO)`. Read what exists first. If that method already exists, reuse it and read its real signature. If it does not (the usual case right after the module scaffold, where the Service and Repository are empty skeletons), build the use-case side in Step 4, following 04 (STEP 2-3) and 05. Append only; never overwrite an existing method.
 - **Domain error keys:** The Service's `Result` `errorCode` holds domain keys (e.g. `{MODULE}_SLUG_CONFLICT`), never raw HTTP statuses.
 - **Core stays framework-free:** No `Illuminate\*` import in `core/` Domain/Application. The FormRequest and Controller are delivery code under `app/`. The Request DTO and the MapperContract live in Core.
 - **Route Binding:** Once the `store` route is defined, update the `create.blade.php` form action from `action="#"` to the named route.
@@ -52,7 +52,66 @@ This skill safely implements the data-saving workflow (Form Submit/POST) for an 
     - If the contract and mapper already exist, append the `mapToCreateDTO` method and leave the rest untouched.
     - Bind the contract to the adapter once in `app/Providers/AppServiceProvider.php` (append only). Do not rebind anything that already exists.
 
-4. **Safe Route Injection (`routes/web.php`):**
+4. **Use-Case Side (Entity, Repository, Command Service) - build only what is missing:**
+    - **Entity:** append the named constructor `{ModuleName}Entity::create(...)` to the `readonly` Entity. It enforces the creation invariants and returns a NEW Entity (no setters). Do not invent rules the business does not have. If something else reacts to creation, the Entity carries a plain-PHP `{ModuleName}CreatedEvent` (in `Domain/Events/`) in its events list. A new Entity has no id yet, so `id` is `?int` (03 and 05 R1: the scaffold already generates it that way). If an older Entity still declares `int $id`, widen it to `?int` as the ONE sanctioned edit to an existing property, and list it in your report.
+    - **Repository contract and adapter:** declare `create({ModuleName}Entity ${entity}): {ModuleName}Entity` on `{ModuleName}RepositoryContract`. Implement it in `{ModuleName}Repository` with `createRecord()` fed by `{ModuleName}EntityMapper::toPersistenceArray()`, and return `toEntity($model->getAttributes())`. Catch framework failures in the adapter and rethrow a standard `RuntimeException`.
+    - **Command Service:** append `create{ModuleName}({ModuleName}CreateDTO ${entity}CreateDTO): Result` following 04 STEP 3 and the reference below. If a Shared port it needs (`SlugGeneratorContract`, `FileUploaderContract`, `EventDispatcherContract`) is not in the constructor yet, append it as a new promoted parameter at the END. Upload directory names are `private const` values at the top of the Service (AGENTS.md - INFRASTRUCTURE STRING ENCAPSULATION MANDATE).
+    - **Domain exception:** if the schema has a unique slug and no `{ModuleName}SlugConflictException` exists, add it to `Domain/Exceptions/`.
+
+```php
+/**
+ * Creates a {entity}.
+ */
+public function create{ModuleName}({ModuleName}CreateDTO ${entity}CreateDTO): Result
+{
+    $uploadedPath = null;
+
+    $this->transactionManager->beginTransaction();
+
+    try {
+        // Derived fields go through the DTO's with*() clones. Omit what the schema does not have:
+        //   slug: $this->slugGenerator->generateUniqueSlug(sourceValue: ..., table: '{module}')
+        //   file: $this->fileUploader->upload(file: ..., directory: self::IMAGE_DIRECTORY)
+        //         and keep the stored path in $uploadedPath for cleanup.
+
+        $new{ModuleName}Entity = {ModuleName}Entity::create(/* from the DTO */); // rules run INSIDE the Entity
+        $events = $new{ModuleName}Entity->releaseEvents(); // BEFORE persisting
+
+        $saved{ModuleName}Entity = $this->{entity}Repository->create($new{ModuleName}Entity);
+
+        $this->transactionManager->commit();
+    } catch ({ModuleName}SlugConflictException $exception) {
+        return $this->rollbackAndFail(
+            message: $exception->getMessage(),
+            errorCode: '{MODULE}_SLUG_CONFLICT',
+            uploadedPath: $uploadedPath,
+        );
+    } catch (\Throwable $exception) {
+        $this->logger->error(
+            "Failed to create {module}: " . $exception->getMessage(),
+            ['exception' => $exception],
+        );
+
+        return $this->rollbackAndFail(
+            message: "We couldn't create the {ModuleName} right now. Please try again.",
+            errorCode: '{MODULE}_CREATE_ERROR',
+            uploadedPath: $uploadedPath,
+        );
+    }
+
+    // Committed. A failure below is logged and never turns the create into a failure.
+    $this->dispatchEventsQuietly($events); // omit if the module has no events
+
+    return Result::success(
+        data: $this->responseMapper->toResponseDTO($saved{ModuleName}Entity),
+        message: "{ModuleName} created successfully.",
+    );
+}
+```
+
+    Reuse the `rollbackAndFail(...)` and `dispatchEventsQuietly(array $events)` helpers if the Service already has them. Otherwise add them as in the update skill: `rollbackAndFail` calls `rollback()`, deletes a newly uploaded file quietly, and returns `Result::failure`. Verify the real `Result`, mapper, and port signatures before writing.
+
+5. **Safe Route Injection (`routes/web.php`):**
     - Routes use `Route::resource()` inside the existing middleware/prefix/name group. Do NOT hand-write a `Route::post(...)` line.
     - If the module's resource is registered with `->only([...])`, add `'store'` to it. If it uses `->except([...])`, remove `'store'` from it. If it has no restriction, change nothing.
 
@@ -64,7 +123,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
 
     This yields `POST /admin/{module}` named `admin.{module}.store`.
 
-5. **Safe Controller Injection (`App\Http\Controllers\Admin\{ModuleName}Controller`):**
+6. **Safe Controller Injection (`App\Http\Controllers\Admin\{ModuleName}Controller`):**
 
     **CONSTRUCTOR INJECTION MANDATE (STRICT):**
     - The Controller's `__construct()` MUST receive `{ModuleName}CommandService` AND `{ModuleName}MapperContract`. Add whichever is missing as appended promoted parameters.
@@ -82,7 +141,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     - On success: redirect to `admin.{module}.index` with the success message. Verify first that this route exists in `routes/web.php`. If it does not, redirect to `admin.{module}.create` instead and flag it in your report. Never redirect to a missing route.
     - Never catch exceptions in the Controller.
 
-6. **View Update (`resources/views/backend/pages/{module}/create.blade.php`):**
+7. **View Update (`resources/views/backend/pages/{module}/create.blade.php`):**
     - Use the project's real views directory (the one that holds `index.blade.php`). Verify it, do not guess.
     - Change the form `action` from `#` to `{{ route('admin.{module}.store') }}`, keep `method="POST"` and `@csrf`, and remove the "store route not defined yet" reminder block left by the form scaffold.
     - Keep `enctype="multipart/form-data"` if and only if the schema has file/image columns. Change nothing else in the view.
@@ -95,7 +154,10 @@ Testing is paused (`AGENTS.md` - UNIT TESTING POLICY). Do not write or claim tes
 
 Claim only what you can point to in the code. A false claim is a defect.
 
-- [ ] The Command Service method this action calls exists, and its real signature was read, not assumed.
+- [ ] `create{ModuleName}` was either already present (reused, with its real signature read) or built in Step 4 without overwriting any existing method.
+- [ ] Entity `create()` is a named constructor that enforces its invariants and returns a new `readonly` instance, with no setters.
+- [ ] Repository `create()` takes and returns an Entity, uses `toPersistenceArray()` / `toEntity($model->getAttributes())`, and rethrows framework failures as `RuntimeException`.
+- [ ] Command Service: transaction opened, every failure branch rolls back, a newly uploaded file is removed on failure, events are released BEFORE persisting and dispatched only after commit, and a failing cleanup or dispatch is logged without failing the create.
 - [ ] No existing method, route, binding, or constructor parameter was overwritten, reordered, or removed. Each appended constructor parameter is listed in the report.
 - [ ] FormRequest rules match the schema, skip PK/timestamps/domain-generated fields, and contain no business rule.
 - [ ] Request DTO is in `Application/DTOs/Requests/`, is a `readonly class` with promoted properties only, has NO static factory, types uploaded files `mixed`, and has a `with*()` clone for each derived field that exists in the schema.

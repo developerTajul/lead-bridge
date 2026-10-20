@@ -1,0 +1,234 @@
+================================================================================
+08 - EVENTS AND QUEUES (DOMAIN EVENTS, EVENT DISPATCH, QUEUE JOBS)
+Binding system instructions. Single home for every event and queue rule.
+Extends 05-rich-domain-and-services.txt (Entity, Command Service) and
+06-ports-and-portability.txt (ports and adapters).
+Load when: an Entity raises a Domain Event, a Command Service dispatches
+events or pushes a queue job, or an event listener / queue handler / adapter
+is written or reviewed.
+================================================================================
+
+SCOPE NOTE: events and queues are optional per module. Create them only when
+a use case raises an event or needs queued work (YAGNI applies to business
+events; the Shared ports themselves are part of the mandated baseline).
+
+--------------------------------------------------------------------------------
+E1. EVENT OR JOB? (DECISION GUIDE)
+--------------------------------------------------------------------------------
+
+- DOMAIN EVENT: "something happened" (CouponRedeemedEvent). It is a fact in
+  the past tense, raised by an Entity, and zero or more listeners may react.
+  The raiser does not know or care who listens.
+- QUEUE JOB: "do this work later" (CouponExpireJob). It is a command for
+  deferred or asynchronous work, handled by exactly one handler.
+- A listener MAY push a job when the reaction is slow or must be retried.
+- Both are plain PHP objects. Both reach the framework only through a port
+  (EventDispatcherContract, QueueContract).
+
+--------------------------------------------------------------------------------
+E2. DOMAIN EVENTS (THE OBJECT)
+--------------------------------------------------------------------------------
+
+1. A Domain Event is a `readonly class`, plain PHP, no framework base class
+   and no framework import.
+2. Name: <Module><PastTenseAction>Event (CouponRedeemedEvent). Location:
+   core/<Module>/Domain/Events/.
+3. It carries plain data only (scalars, Value Objects, DateTimeImmutable).
+   Never an Entity, an Eloquent model, or a framework type.
+
+    namespace Core\Coupon\Domain\Events;
+
+    readonly class CouponRedeemedEvent
+    {
+        public function __construct(public string $code) {}
+    }
+
+--------------------------------------------------------------------------------
+E3. THE ENTITY CARRIES ITS EVENTS (IMMUTABLE ENTITY RULES)
+--------------------------------------------------------------------------------
+
+The Entity is `readonly`, so its event list cannot be mutated or cleared. These
+rules make that work without losing events:
+
+1. The Entity holds the events it raised in a readonly list
+   (`private array $domainEvents = []`, last constructor parameter) and exposes
+   `releaseEvents(): array`.
+2. EVERY behaviour method passes the existing events to the NEW instance and
+   appends any new event: `domainEvents: [...$this->domainEvents, new XEvent(...)]`.
+   A method that raises no event still passes the list forward. Otherwise
+   earlier events are silently lost.
+3. `releaseEvents()` only RETURNS the list. It never clears it (a readonly
+   property cannot be cleared).
+4. An Entity rebuilt from storage by the EntityMapper starts with an EMPTY
+   list. Only an Entity returned by a behaviour method carries events.
+5. The Entity NEVER dispatches events. It only carries them.
+
+--------------------------------------------------------------------------------
+E4. WRITE-FLOW ORDERING (CRITICAL)
+--------------------------------------------------------------------------------
+
+Inside a Command Service use case:
+
+  1. Call the Entity behaviour method. It returns a NEW Entity that carries
+     the events.
+  2. `$events = $entity->releaseEvents();` - BEFORE persisting, from THAT
+     Entity.
+  3. Persist: `$savedEntity = $this->repository->update($entity);`. The Entity
+     the repository returns is rebuilt from storage and has an EMPTY list.
+     NEVER release events from it (the events would be lost).
+  4. `commit()`.
+  5. AFTER a successful commit: dispatch `$events` through
+     EventDispatcherContract, and push queue jobs through QueueContract.
+
+Rules:
+- Events and jobs fire only after a successful commit. Never before it and
+  never when the transaction rolled back.
+- The Service dispatches `$events` ONCE and never reuses the same Entity
+  instance to dispatch again.
+- A failing dispatch or push after commit is logged and the Result stays
+  success. The write already happened, so never roll back for it and never
+  turn it into a failed use case.
+- A Query Service never raises, releases, or dispatches events.
+
+--------------------------------------------------------------------------------
+E5. EVENT DISPATCH PORT AND ADAPTERS
+--------------------------------------------------------------------------------
+
+Port (Core\Shared\Domain\Contracts):
+
+    interface EventDispatcherContract
+    {
+        public function dispatch(object $event): void;
+    }
+
+Laravel adapter (Core\Shared\Infrastructure\Events):
+
+    final class LaravelEventDispatcher implements EventDispatcherContract
+    {
+        public function __construct(private readonly Dispatcher $dispatcher) {}
+
+        public function dispatch(object $event): void
+        {
+            $this->dispatcher->dispatch($event);
+        }
+    }
+
+    // $dispatcher is Illuminate\Contracts\Events\Dispatcher.
+
+WordPress adapter (plugin adapter layer):
+
+    final class WordPressEventDispatcher implements EventDispatcherContract
+    {
+        public function dispatch(object $event): void
+        {
+            do_action('myplugin_core_event', $event);
+            do_action('myplugin_core_event_' . $event::class, $event);
+        }
+    }
+
+    // Replace the hook prefix with the plugin's own.
+
+Rules:
+1. Adapters contain no business logic and leak no framework types.
+2. The Core never calls event(), Event::dispatch(), dispatch(), do_action(),
+   or any framework helper.
+3. Bind EventDispatcherContract once per environment (composition root).
+
+--------------------------------------------------------------------------------
+E6. LISTENERS
+--------------------------------------------------------------------------------
+
+1. A listener is framework-side adapter code. It reacts to an event and calls
+   ONE Core Service method (or pushes a job). It holds no business rule. If a
+   listener needs a rule, the rule belongs in a Core Service or the Entity.
+2. Laravel registers listeners in a service provider. WordPress registers them
+   at plugin bootstrap with add_action(). The Core never knows which.
+3. A listener failure must not affect the already-committed write.
+
+--------------------------------------------------------------------------------
+E7. QUEUE JOBS AND HANDLERS
+--------------------------------------------------------------------------------
+
+A queued job is a plain PHP message plus a plain PHP handler, both in the
+Core. The framework queue only carries the message and calls the handler.
+
+Port (Core\Shared\Domain\Contracts):
+
+    interface QueueContract
+    {
+        public function push(object $job, ?int $delaySeconds = null): void;
+    }
+
+Core (module), in core/<Module>/Application/Jobs/:
+
+    readonly class CouponExpireJob
+    {
+        public function __construct(public int $couponId) {}
+    }
+
+    final class CouponExpireJobHandler
+    {
+        public function __construct(private readonly CouponCommandService $couponCommandService) {}
+
+        public function handle(CouponExpireJob $job): void
+        {
+            // TODO: call ONE Command Service method with $job->couponId
+        }
+    }
+
+Laravel adapter (Core\Shared\Infrastructure\Queue): wraps the message in a
+framework job class (implements ShouldQueue) that lives in Infrastructure.
+That wrapper resolves <Job>Handler from the container and calls handle(). The
+Core job class itself never implements ShouldQueue.
+
+WordPress adapter: schedules the message with Action Scheduler
+(as_enqueue_async_action / as_schedule_single_action) or
+wp_schedule_single_event, and a hook registered at plugin bootstrap resolves
+<Job>Handler from the plugin container and calls handle(). Serialise the
+message safely: restrict allowed classes on unserialize, or store a plain
+array payload and rebuild the message.
+
+Rules:
+1. Names: <Module><Action>Job and <Module><Action>JobHandler.
+2. A handler is an orchestrator: it calls ONE Command Service method. Retries
+   and failure handling are the adapter's concern. The handler stays
+   idempotent where the use case allows (a retried job must not double-apply).
+3. Jobs are pushed AFTER a successful commit, from the Command Service (E4).
+4. Job payloads are plain scalars or arrays. Never an Entity or a model.
+
+--------------------------------------------------------------------------------
+E8. ANTI-PATTERNS (EACH ONE FAILS REVIEW)
+--------------------------------------------------------------------------------
+
+[x] Releasing events from the Entity the repository returned (always empty).
+[x] A behaviour method that rebuilds the Entity without passing $domainEvents
+    forward.
+[x] Dispatching or pushing before commit, or after a rollback.
+[x] An Entity that dispatches its own events.
+[x] Reusing the same Entity instance to dispatch twice.
+[x] Turning a failed dispatch/push after commit into a failed Result or a
+    rollback.
+[x] A Domain Event or job that extends a framework class or carries an Entity
+    or model.
+[x] A listener or handler that contains a business rule.
+[x] The Core calling event(), dispatch(), Queue::push(), or do_action().
+[x] A Query Service that dispatches events or pushes jobs.
+
+--------------------------------------------------------------------------------
+E9. DEFINITION OF DONE (EVENTS AND QUEUES)
+--------------------------------------------------------------------------------
+
+[ ] Events and jobs are plain PHP and cross the boundary only through
+    EventDispatcherContract / QueueContract.
+[ ] Every Entity behaviour method passes $domainEvents forward.
+[ ] Events are released from the behaviour-method Entity BEFORE persisting and
+    dispatched only after a successful commit.
+[ ] A failing dispatch or push after commit is logged and does not fail the
+    use case.
+[ ] Listeners and handlers hold no business rule and call one Core Service
+    method.
+[ ] Each Contract -> adapter binding is registered once per environment.
+
+================================================================================
+END OF 08 - EVENTS AND QUEUES
+================================================================================

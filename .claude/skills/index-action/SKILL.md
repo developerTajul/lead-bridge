@@ -9,7 +9,7 @@ description: Implements the paginated index (list) action for an existing module
 
 This skill safely implements the paginated data retrieval workflow (Index/GET) for an existing module. It updates the repository contract, infrastructure implementation, Query Service orchestration, and adds the `index()` method with its GET route, without destructively overwriting existing delivery-layer code.
 
-> **This work follows the Rich Domain Model.** Business rules live in the Entity; Services are orchestrators only. The index is a **read** use case, so it goes through a Query Service. Read `AGENTS.md`, and load `.claude/rules/05-rich-domain-and-services.txt` and `.claude/rules/06-ports-and-portability.txt` before writing code.
+> **This work follows the Rich Domain Model.** Business rules live in the Entity; Services are orchestrators only. The index is a **read** use case, so it goes through a Query Service. Read `AGENTS.md`, and load `.claude/rules/02-framework-adapter-laravel.txt` (route and Eloquent mapping rules), `05-rich-domain-and-services.txt`, and `06-ports-and-portability.txt` before writing code.
 
 **Placeholders used in this skill:**
 
@@ -42,7 +42,7 @@ This skill safely implements the paginated data retrieval workflow (Index/GET) f
 2. **Infrastructure Repository Update (`Core\{ModuleName}\Infrastructure\Repositories\{ModuleName}Repository`):**
     - Implement `paginate()`.
     - Fetch the Laravel paginator with `$this->paginateEloquent($perPage)`.
-    - Map models to Domain Entities with the injected EntityMapper, using the Collection `map()` chained with `all()`. Do NOT use native `array_map()` here (AGENTS.md - COLLECTION MAPPING PREFERENCE).
+    - Map models to Domain Entities with the injected EntityMapper, using the Collection `map()` chained with `all()`. Do NOT use native `array_map()` here (`.claude/rules/02-framework-adapter-laravel.txt` section 7 - COLLECTION MAPPING PREFERENCE).
     - Return a new `PaginatedResult` with the mapped entities and the pagination metadata (total, currentPage, perPage, lastPage).
     - Catch framework-specific failures inside the adapter and rethrow them as a standard `RuntimeException`. Never swallow them silently.
 
@@ -56,7 +56,7 @@ public function paginate(int $perPage = 10): PaginatedResult
 
     $entities = $paginator
         ->getCollection()
-        ->map(fn ($model) => $this->mapper->toEntity($model->toArray()))
+        ->map(fn ($model) => $this->mapper->toEntity($model->getAttributes()))
         ->all();
 
     return new PaginatedResult(
@@ -88,7 +88,7 @@ public function get{ModulePlural}(int $perPage = 10): Result
 
         $paginatedResponse = new PaginatedResult(
             items: array_map(
-                fn (${ModuleName}Entity ${entity}Entity) => $this->responseMapper->toResponseDTO(${entity}Entity),
+                fn ({ModuleName}Entity ${entity}Entity) => $this->responseMapper->toResponseDTO(${entity}Entity),
                 $paginatedEntities->items,
             ),
             total: $paginatedEntities->total,
@@ -115,7 +115,7 @@ public function get{ModulePlural}(int $perPage = 10): Result
 }
 ```
 
-    Verify the real `Result` signatures, the mapper method name, and the `PaginatedResult` constructor against the codebase. Replace `${ModuleName}Entity` in the closure with the real Entity class name and import it.
+    Verify the real `Result` signatures, the mapper method name, and the `PaginatedResult` constructor against the codebase. Replace `{ModuleName}Entity` in the closure with the real Entity class name and import it.
 
 4. **Safe Route Injection (`routes/web.php`):**
     - Routes use `Route::resource()` inside the existing middleware/prefix/name group. Do NOT hand-write a `Route::get(...)` line.

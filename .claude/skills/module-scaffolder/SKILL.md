@@ -33,9 +33,9 @@ This skill scaffolds a new Domain-Driven Design (DDD) module using the architect
 ## Execution Steps
 
 1. **Pre-checks (read only):**
-    - Read `AGENTS.md` and `03-module-scaffolding.txt`.
+    - Read `AGENTS.md`, `03-module-scaffolding.txt`, and `.claude/rules/02-framework-adapter-laravel.txt` (Eloquent mapping rules for the EntityMapper and Repository).
     - Confirm `core/{ModuleName}/` does not already exist.
-    - Check which Shared pieces exist: `TransactionManagerContract`, `EventDispatcherContract`, `SlugCheckerContract`, `FileUploaderContract`, `BaseRepository`, `Result`, `PaginatedResult`, and the `SlugGenerator` utility. Reuse what exists. For a Shared port the module needs that has no adapter yet, follow the Adapter Co-Generation Mandate in `03`: create the contract and its adapter, and bind it once in the composition root. Never re-invent an existing Shared building block.
+    - Check which Shared pieces exist: `TransactionManagerContract`, `EventDispatcherContract`, `SlugCheckerContract`, `SlugGeneratorContract`, `FileUploaderContract`, `BaseRepository`, `Result`, `PaginatedResult`, and the `SlugGenerator` utility (with its `SlugGeneratorContract`). Reuse what exists. For a Shared port the module needs that has no adapter yet, follow the Adapter Co-Generation Mandate in `03`: create the contract and its adapter, and bind it once in the composition root. Never re-invent an existing Shared building block.
 
 2. **Directory Generation:** Create the module tree inside `core/` (no `DataObjects/`, `Events/`, `Jobs/`, or `Application/DTOs/Requests/` yet):
 
@@ -58,7 +58,7 @@ This skill scaffolds a new Domain-Driven Design (DDD) module using the architect
 
 3. **Entity Generation (`Domain/Entities/`):**
     - Create the Entity as a PHP 8 `readonly class`.
-    - Implement `__construct()` with constructor property promotion, one property per schema column. Types match the schema exactly (nullable columns become `?type`, enum columns become the Domain enum).
+    - Implement `__construct()` with constructor property promotion, one property per schema column. Types match the schema exactly (nullable columns become `?type`, enum columns become the Domain enum), with one exception: the primary key `id` is ALWAYS `?int` (null until persisted). The ResponseDTO keeps `int $id` and the ResponseMapper casts `(int) $entity->id`.
     - Add the last constructor parameter `private array $domainEvents = []` and a `releaseEvents(): array` method that returns it. Both are mechanical.
     - Do NOT add behaviour methods, named constructors, or business rules. Leave a `// TODO:` marker saying they are added with the use cases.
     - No framework import, no I/O.
@@ -76,7 +76,7 @@ This skill scaffolds a new Domain-Driven Design (DDD) module using the architect
     - `{ModuleName}ResponseDTO`: a `readonly class` with promoted properties of plain PHP types, mapped from the Entity's presentation-safe fields.
     - `{ModuleName}ResponseMapper`: a `final class` with `toResponseDTO(Entity): ResponseDTO`, a mechanical mapping.
     - `{ModuleName}CommandService` and `{ModuleName}QueryService`: `final` classes with constructors and dependency injections only (constructor property promotion, no assignments in the body), and no methods.
-        - Command Service constructor: repository contract, response mapper, `TransactionManagerContract`, `EventDispatcherContract`, logger, plus `SlugCheckerContract` if the schema has a `slug` column and `FileUploaderContract` if it has a thumbnail/image/file column. Add `QueueContract` only if the module needs queued work.
+        - Command Service constructor: repository contract, response mapper, `TransactionManagerContract`, `EventDispatcherContract`, logger, plus `SlugGeneratorContract` (implemented by the Shared `SlugGenerator`, which carries `SlugCheckerContract`) if the schema has a `slug` column and `FileUploaderContract` if it has a thumbnail/image/file column. Add `QueueContract` only if the module needs queued work.
         - Query Service constructor: repository contract, response mapper, logger only. No transaction manager, event dispatcher, slug, or upload ports.
 
 7. **Infrastructure Layer Generation:**
@@ -88,7 +88,7 @@ This skill scaffolds a new Domain-Driven Design (DDD) module using the architect
     - Always separate array definitions from functional operations (such as `array_filter` or `array_map`).
     - When a method returns a filtered array, first declare a local variable (e.g., `$data`) holding the complete associative array. Then apply the functional operation in a separate return statement (e.g., `return array_filter($data, ...)`).
     - Never inline large arrays directly inside function calls.
-    - In Repository code, converting Eloquent models to Entities uses Collection `map()` chained with `all()`, never native `array_map()` (AGENTS.md - COLLECTION MAPPING PREFERENCE).
+    - In Repository code, converting Eloquent models to Entities uses Collection `map()` chained with `all()`, never native `array_map()` (`.claude/rules/02-framework-adapter-laravel.txt` section 7 - COLLECTION MAPPING PREFERENCE).
 
 9. **Composition Root Wiring:**
     - Append the `{ModuleName}RepositoryContract` to `{ModuleName}Repository` binding in `app/Providers/AppServiceProvider.php`, once. Do not alter any existing binding.

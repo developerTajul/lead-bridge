@@ -59,7 +59,7 @@ Business logic MUST live in the Domain layer, inside Entities (and Value Objects
 - Services MUST NOT contain business rules, conditionals about business state, or calculations that belong to the Entity. If a Service needs to decide something about business state, that decision MUST be a method on the Entity.
 - Entities, Value Objects, and Domain Events MUST NOT import anything from the framework (no `Illuminate\*`, no WordPress functions or classes, no ORM annotations).
 - Eloquent models and WordPress post/table structures are persistence details. They MUST stay in Infrastructure and MUST be converted to and from Domain Entities through a Mapper.
-- When something happens that other parts of the system care about, the Entity carries a Domain Event (plain PHP object) in a readonly list and exposes `releaseEvents()`. The Entity never dispatches it. The Command Service dispatches it through the EventDispatcher port after a successful commit.
+- Domain Events live in a readonly list on the Entity. Every behavior method MUST pass the existing events to the NEW instance and append any new event (`domainEvents: [...$this->domainEvents, new SomethingHappenedEvent(...)]`), including methods that raise no event, so no event is ever lost. `releaseEvents()` only RETURNS the list; it never clears it (a readonly property cannot be cleared). The Command Service takes the events from the Entity returned by the behavior method BEFORE persisting (`$events = $entity->releaseEvents(); $savedEntity = $repository->update($entity);`). The Entity the repository returns is rebuilt from storage and starts with an empty list, so events MUST NOT be released from it. The Service dispatches `$events` once, through the EventDispatcher port, after a successful commit. Full event and queue rules: `.claude/rules/08-events-and-queues.txt`. The Entity never dispatches events itself.
 
 SERVICE LAYER MANDATE (ORCHESTRATOR, COMMAND/QUERY SEPARATION)
 
@@ -165,50 +165,9 @@ Business rule violations MUST be raised from the Domain (Entity / Value Object) 
 INFRASTRUCTURE STRING ENCAPSULATION MANDATE
 The Application layer (Services) MUST NEVER contain inline hardcoded infrastructure strings (e.g., file storage directory names). Any such string value MUST be defined as a private constant at the top of the Service class (e.g., private const THUMBNAIL_DIRECTORY = 'categories';) and referenced via self::CONSTANT_NAME. This ensures a single source of truth and keeps the logic clean without over-engineering the Domain layer for simple localized configurations.
 
-COLLECTION MAPPING PREFERENCE
-Location: Infrastructure / Repository Layer
+LARAVEL-SPECIFIC CONVENTIONS (MOVED OUT OF THIS FILE)
 
-When converting Eloquent paginators or models to Domain Entities, strictly avoid using native PHP array_map(). Instead, ALWAYS use Laravel Collection's map() method chained with all(). This ensures cleaner syntax via method chaining while strictly maintaining a framework-agnostic output (plain PHP array) for the Application/Service layer.
-
-Canonical Pattern:
-
-```php
-$entities = $laravelPaginator
-    ->getCollection()
-    ->map(fn($model) => $this->mapper->toEntity($model->toArray()))
-    ->all();
-```
-
-ROUTE DEFINITION MANDATE
-Location: routes/web.php and routes/api.php
-
-All CRUD and module routing MUST be declared through Laravel's grouping and resource helpers. The AI MUST NOT register individual, verbose, per-verb route lines for a module's CRUD surface.
-
-- Shared concerns (URL prefix, route-name prefix, middleware) MUST be hoisted into a single Route::middleware()->prefix()->name()->group() wrapper instead of being repeated on every line.
-- Standard seven-action CRUD MUST use Route::resource() (or Route::apiResource() for API endpoints). Do NOT hand-write index/create/store/edit/update/destroy routes.
-- When only a subset of actions is needed, constrain the resource with ->only([...]) or ->except([...]) rather than falling back to individual route lines.
-- Non-CRUD or genuinely one-off endpoints (e.g. login, logout, a custom action) MAY be declared individually, but MUST still sit inside the appropriate middleware/prefix/name group.
-
-Example Before:
-
-```php
-Route::get('/admin/brands', [BrandController::class, 'index'])->name('admin.brands.index');
-Route::get('/admin/brands/create', [BrandController::class, 'create'])->name('admin.brands.create');
-Route::post('/admin/brands', [BrandController::class, 'store'])->name('admin.brands.store');
-Route::get('/admin/brands/{brand}/edit', [BrandController::class, 'edit'])->name('admin.brands.edit');
-Route::put('/admin/brands/{brand}', [BrandController::class, 'update'])->name('admin.brands.update');
-Route::delete('/admin/brands/{brand}', [BrandController::class, 'destroy'])->name('admin.brands.destroy');
-```
-
-Example After:
-
-```php
-Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
-    Route::resource('brands', BrandController::class);
-    Route::resource('categories', CategoryController::class);
-    Route::resource('users', UserController::class);
-});
-```
+This file stays framework-agnostic. The Laravel-specific conventions - COLLECTION MAPPING PREFERENCE (how Eloquent models become Entities) and ROUTE DEFINITION MANDATE (grouping and resource rules for routes/web.php and routes/api.php) - live in `.claude/rules/02-framework-adapter-laravel.txt` (sections 7 and 8). Load that file whenever you touch Eloquent repositories, entity mappers, or route files.
 
 ## Global Execution Policy: Interactive Alert
 
@@ -268,7 +227,7 @@ RULE FILE INDEX
    Load when: Always relevant - core architecture principles (Golden Rules, Hexagonal model, layer boundaries, SOLID/KISS, Definition of Done).
 
 2. .claude/rules/02-framework-adapter-laravel.txt
-   Load when: Working with Laravel specifics - directory structure, Shared Kernel, naming conventions, autoloading, canonical request flow.
+   Load when: Working with Laravel specifics - directory structure, Shared Kernel, naming conventions, autoloading, canonical request flow, Eloquent model-to-Entity mapping (collection mapping), and route definition rules (routes/web.php, routes/api.php).
 
 3. .claude/rules/03-module-scaffolding.txt
    Load when: ONLY when scaffolding a NEW module - execution guardrails, FULL-BASELINE MANDATE, SlugGenerator auto-generation, mandatory member rules, EMPTY-SKELETON GUARD.
@@ -280,7 +239,10 @@ RULE FILE INDEX
    Load when: Writing or changing an Entity, Value Object, Command Service, Query Service, or ResponseDTO (Rich Domain Model, CQS, event-carrying entities).
 
 6. .claude/rules/06-ports-and-portability.txt
-   Load when: Adding a port or adapter, wiring events or queues, touching the Shared kernel, or preparing core/ for another framework or a WordPress plugin.
+   Load when: Adding a port or adapter, touching the Shared kernel, or preparing core/ for another framework or a WordPress plugin.
 
 7. .claude/rules/07-testing.txt
    Load when: ONLY when the developer explicitly asks for tests or re-enables testing. Testing is currently PAUSED (see UNIT TESTING POLICY) - do not load this file otherwise.
+
+8. .claude/rules/08-events-and-queues.txt
+   Load when: An Entity raises a Domain Event, a Command Service dispatches events or pushes a queue job, or an event listener, queue handler, or event/queue adapter is written or reviewed.

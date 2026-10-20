@@ -3,6 +3,7 @@
 use App\Providers\ActivityServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\CompanyServiceProvider;
+use App\Providers\ContactServiceProvider;
 use App\Providers\LeadServiceProvider;
 
 return [
@@ -10,4 +11,5 @@ return [
     LeadServiceProvider::class,
     ActivityServiceProvider::class,
     CompanyServiceProvider::class,
+    ContactServiceProvider::class,
 ];

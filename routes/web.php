@@ -3,6 +3,7 @@
 use App\Http\Controllers\Web\Backend\ActivityController;
 use App\Http\Controllers\Web\Backend\AuthController;
 use App\Http\Controllers\Web\Backend\CompanyController;
+use App\Http\Controllers\Web\Backend\ContactController;
 use App\Http\Controllers\Web\Backend\DashboardController;
 use App\Http\Controllers\Web\Backend\LeadController;
 use Illuminate\Support\Facades\Route;
@@ -29,5 +30,6 @@ Route::middleware('auth')->group(function () {
         Route::resource('leads', LeadController::class);
         Route::resource('activities', ActivityController::class);
         Route::resource('companies', CompanyController::class);
+        Route::resource('contacts', ContactController::class);
     });
 });

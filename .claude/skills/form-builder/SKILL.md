@@ -9,7 +9,7 @@ description: Scaffolds the delivery layer for a module's create form (route, thi
 
 This skill generates the Laravel delivery layer needed to render a create form, based STRICTLY on a provided database schema. It follows the request lifecycle (Route -> Controller -> View) and prepares the user interface gateway without implementing any data-persistence logic.
 
-> **This work follows the Rich Domain Model.** The form scaffold is delivery code only: it holds no business rules and touches no Entity, Service, or Repository. Business rules (validation of state, derived values) belong to the Entity and arrive later with the store use case. Read `AGENTS.md` before writing code.
+> **This work follows the Rich Domain Model.** The form scaffold is delivery code only: it holds no business rules and touches no Entity, Service, or Repository. Business rules (validation of state, derived values) belong to the Entity and arrive later with the store use case. Read `AGENTS.md` and `.claude/rules/02-framework-adapter-laravel.txt` (route rules) before writing code.
 
 **Placeholders used in this skill:**
 

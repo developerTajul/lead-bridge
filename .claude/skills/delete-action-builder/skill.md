@@ -2,9 +2,9 @@
 
 Implement the `{ModuleName}` Delete feature based on the following specifications. Ensure strict adherence to our Hexagonal Architecture.
 
-> **This work follows the Rich Domain Model.** Business rules (for example "can this record be deleted?") live in the Entity, not in the Service. The Service is an orchestrator only. Read `AGENTS.md`, and load `.claude/rules/05-rich-domain-and-services.txt` and `.claude/rules/06-ports-and-portability.txt` before writing code.
+> **This work follows the Rich Domain Model.** Business rules (for example "can this record be deleted?") live in the Entity, not in the Service. The Service is an orchestrator only. Read `AGENTS.md`, and load `.claude/rules/02-framework-adapter-laravel.txt` (route rules), `05-rich-domain-and-services.txt`, `06-ports-and-portability.txt`, and `08-events-and-queues.txt` before writing code.
 
-> **On the code snippets below:** each one is a _reference implementation_ showing the expected logic, structure, and step order — it is **not** a literal drop-in. Before writing any method, verify the exact signatures (`Result`, mapper methods, logger calls, etc.) and style conventions against `CLAUDE.md` / `AGENTS.md` and the existing codebase. If the real signature or convention differs from the reference, follow the real one — never the placeholder.
+> **On the code snippets below:** each one is a _reference implementation_ showing the expected logic, structure, and step order — it is **not** a literal drop-in. Before writing any method, verify the exact signatures (`Result`, mapper methods, logger calls, etc.) and style conventions against `AGENTS.md` and the existing codebase. If the real signature or convention differs from the reference, follow the real one — never the placeholder.
 
 **Placeholders used in this template:**
 
@@ -159,11 +159,11 @@ Implement the `delete{ModuleName}` method following the logic below. The method 
 4. **Execute deletion** — call `{entity}Repository->delete($entity)`. If it returns `false`, return `Result::failure()` with `{MODULE}_DELETE_FAILED`.
 5. **File cleanup (if applicable)** — if the entity has files/images (e.g. thumbnails), delete them through `FileUploaderContract` **only after** the database deletion is confirmed (never before — if the deletion later failed, you would have removed a file the DB row still references).
 6. **Cleanup and events must not undo the delete.** Once the row is gone the use case succeeded. File cleanup and event dispatch each run in their own `try`/`catch`; a failure there is **logged** and the method still returns success. Never let those failures reach the generic `catch` and report a failed delete for a row that no longer exists.
-7. **Dispatch released Domain Events** through `EventDispatcherContract` **after** the delete is confirmed (after `commit()` when a transaction is used). Skip this step when the module has no events.
+7. **Dispatch released Domain Events** (released from the Entity `markAsDeleted()` returned, before the repository call) through `EventDispatcherContract` **after** the delete is confirmed (after `commit()` when a transaction is used). Skip this step when the module has no events.
 8. **Catch unexpected errors** — wrap the main flow in a `try`/`catch`. On `\Throwable`, log via `$this->logger->error()`, then return a generic `Result::failure()` with `{MODULE}_DELETE_ERROR`. Never expose the raw exception message.
 9. **Return `Result`** with `data: null` — delete has no payload, so there is no ResponseDTO to carry.
 
-> **Note on transactions:** this reference has no `transactionManager` wrapping, which is correct for a simple single-row delete. If `{ModuleName}` has child records that must be deleted together (cascade), or any multi-step DB write beyond the single `delete()` call, wrap steps 1–4 in `beginTransaction()` / `commit()` / `rollback()`. Use a dedicated `catch` block per domain exception, each calling `rollback()` before returning (as in the Update flow). Never let a domain exception fall through to the generic `catch (\Throwable)`, and never return early without rolling back. File cleanup and events then run **after** `commit()`.
+> **Note on transactions:** this reference has no `transactionManager` wrapping, which is correct for a simple single-row delete. If `{ModuleName}` has child records that must be deleted together (cascade), or any multi-step DB write beyond the single `delete()` call, wrap steps 1–4 in `beginTransaction()` / `commit()` / `rollback()`, and load the entity with `findByIdForUpdate()` (locking read) instead of `findById()` inside that transaction. Use a dedicated `catch` block per domain exception, each calling `rollback()` before returning (as in the Update flow). Never let a domain exception fall through to the generic `catch (\Throwable)`, and never return early without rolling back. File cleanup and events then run **after** `commit()`.
 
 ```php
 /**
@@ -183,6 +183,7 @@ public function delete{ModuleName}(int $id): Result
 
         // Business rule lives in the Entity. Omit if the module has no delete rule/event.
         $deleted{ModuleName}Entity = ${entity}Entity->markAsDeleted();
+        $events = $deleted{ModuleName}Entity->releaseEvents(); // BEFORE the repository call; omit if no events
 
         $isDeleted = $this->{entity}Repository->delete($deleted{ModuleName}Entity);
 
@@ -211,7 +212,7 @@ public function delete{ModuleName}(int $id): Result
 
     // The row is gone. Side effects below can log, but never turn this into a failure.
     $this->removeFileQuietly(${entity}Entity->thumbnail); // omit if no file/image field
-    $this->dispatchEventsQuietly($deleted{ModuleName}Entity); // omit if no events
+    $this->dispatchEventsQuietly($events); // omit if no events
 
     return Result::success(
         data: null,
@@ -232,10 +233,11 @@ private function removeFileQuietly(?string $path): void
     }
 }
 
-private function dispatchEventsQuietly({ModuleName}Entity ${entity}Entity): void
+/** @param list<object> $events */
+private function dispatchEventsQuietly(array $events): void
 {
     try {
-        foreach (${entity}Entity->releaseEvents() as $event) {
+        foreach ($events as $event) {
             $this->eventDispatcher->dispatch($event);
         }
     } catch (\Throwable $exception) {
@@ -290,7 +292,7 @@ Testing is paused (`AGENTS.md` - UNIT TESTING POLICY). Do not write or claim tes
 
 The agent must self-verify against every item below **by checking the actual generated code**, not from memory. Claim only what the code really contains. A false claim is a defect.
 
-- [ ] Code snippets in this file are reference implementations, not literal code. Verify every signature and convention against `CLAUDE.md` / `AGENTS.md` and the existing codebase before writing.
+- [ ] Code snippets in this file are reference implementations, not literal code. Verify every signature and convention against `AGENTS.md` and the existing codebase before writing.
 - [ ] Route is declared through `Route::resource()` inside the existing group. No hand-written per-verb delete route.
 - [ ] No `<a>` tags for deletion. The delete action in the frontend uses a `<form>` with `@method('DELETE')` and `@csrf`.
 - [ ] Mandatory confirmation popup. The frontend form triggers _"Are you sure to delete this data?"_ before submitting.

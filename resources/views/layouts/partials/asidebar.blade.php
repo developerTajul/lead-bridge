@@ -143,6 +143,40 @@
                         </ul>
                     </li>
 
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub @if (request()->routeIs('admin.contacts.*')) active @endif">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bxs-user-detail'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Contacts
+                            </span>
+                        </a>
+                        {{-- Opened on load when the current page is in this branch. --}}
+                        <ul class="t-list mx-sidenav__sub @if (! request()->routeIs('admin.contacts.*')) mx-sidenav__sub--hide @endif">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="{{ route('admin.contacts.create') }}" class="mx-sidenav__sub-link @if (request()->routeIs('admin.contacts.create')) active-page @endif">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <span class='bx bx-plus-circle'></span>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Contact
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="{{ route('admin.contacts.index') }}" class="mx-sidenav__sub-link @if (request()->routeIs('admin.contacts.index')) active-page @endif">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-list-ul'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Contacts List
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
                     <li class="mx-sidenav__menu-item mx-sidenav__has-sub @if (request()->routeIs('admin.activities.*')) active @endif">
                         <a href="#" class="mx-sidenav__menu-link">
                             <span class="mx-sidenav__menu-icon t-mr-15">

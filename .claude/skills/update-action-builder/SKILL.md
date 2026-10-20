@@ -9,7 +9,7 @@ description: Build, trace, and review the end-to-end update flow in Hexagonal Ar
 
 Build, trace, and review what happens end-to-end when a user clicks "Update" on an Update Form in a Laravel Clean/Hexagonal Architecture project: from the browser request through Middleware, Route, FormRequest, Controller, Mapper, Command Service (transaction, row lock, Entity behaviour), Repository, Model/DB, and back to the response. Use this skill whenever the developer asks to build, review, or debug an update flow for any module, whenever reviewing a Controller/Command Service/Repository trio for an update action, or whenever checking for the known bug classes (missing rollback on early return, TOCTOU race conditions, orphaned uploaded files, Result pattern misuse, events fired before commit, business rules leaking into the Service). Also use when asked to trace or explain "what happens when the update button is clicked."
 
-> **This work follows the Rich Domain Model.** The Entity owns the business rules; the Command Service is an orchestrator only. Update is a **write** use case, so it lives in `{ModuleName}CommandService`, never in a Query Service. Read `AGENTS.md`, and load `.claude/rules/04-crud-pipeline.txt`, `05-rich-domain-and-services.txt`, and `06-ports-and-portability.txt` before building or reviewing.
+> **This work follows the Rich Domain Model.** The Entity owns the business rules; the Command Service is an orchestrator only. Update is a **write** use case, so it lives in `{ModuleName}CommandService`, never in a Query Service. Read `AGENTS.md`, and load `.claude/rules/02-framework-adapter-laravel.txt` (route and Eloquent mapping rules), `04-crud-pipeline.txt`, `05-rich-domain-and-services.txt`, `06-ports-and-portability.txt`, and `08-events-and-queues.txt` before building or reviewing.
 
 **Placeholders used in this skill:**
 
@@ -53,11 +53,11 @@ Controller::update(UpdateRequest $request, int $id)
 CommandService::update{ModuleName}()  ← orchestration only
    1. beginTransaction()
    2. findByIdForUpdate()   — locking read of the existing Entity
-   3. derived fields        — slug via SlugGenerator, new file via FileUploaderContract (DTO with*() clones)
+   3. derived fields        — slug via SlugGeneratorContract, new file via FileUploaderContract (DTO with*() clones)
    4. Entity behaviour      — business rules run INSIDE the Entity, returns a NEW Entity
    5. repository->update(entity) — persistence (write)
    6. commit() / rollback() — every early return and every catch rolls back
-   7. after commit          — delete old/orphaned files, dispatch released Domain Events
+   7. after commit          — delete old/orphaned files, dispatch Domain Events released BEFORE persisting
    │
    ▼
 Repository::update() / findByIdForUpdate()
@@ -111,12 +111,12 @@ Apply the checklist below when reviewing each layer. These come from bugs actual
     - The post-write refresh read (reloading the entity so it contains newly created child rows) MAY use plain `findById()`: the row is already locked at that point.
     - Test requirements for this lock are in `.claude/rules/07-testing.txt` (testing is paused; do not write or require tests).
 
-- [ ] **Business rules live in the Entity.** Rules, state transitions, and derived business values run through an Entity behaviour method that returns a NEW Entity. The Service never reads entity fields to decide (🟡 Design concern). Slug generation that needs a uniqueness check goes through `SlugGenerator`/`SlugCheckerContract` in the Service. The decision about whether a new slug is needed belongs to the Entity.
+- [ ] **Business rules live in the Entity.** Rules, state transitions, and derived business values run through an Entity behaviour method that returns a NEW Entity. The Service never reads entity fields to decide (🟡 Design concern). Slug generation that needs a uniqueness check goes through `SlugGeneratorContract` in the Service. The decision about whether a new slug is needed belongs to the Entity.
 - [ ] **File cleanup is correct on every branch:**
     - If a new file was uploaded and any later step fails (repository update, domain exception, throwable), the newly uploaded file is deleted (orphan-file bug).
     - On success, the old file is deleted **after** `commit()`. Deleting before commit risks losing the old file if the transaction rolls back.
     - A failing file cleanup after a successful commit is logged, never turned into a failed update.
-- [ ] **Events and jobs fire only after commit.** Released Domain Events (`$entity->releaseEvents()`) go through `EventDispatcherContract` after `commit()`, never before and never on rollback. A failing dispatch after commit is logged and the Result stays success. The Entity never dispatches its own events.
+- [ ] **Events and jobs fire only after commit.** Domain Events are released from the Entity the behaviour method returned, BEFORE persisting (`$events = $updatedEntity->releaseEvents()`), never from the Entity the repository returns (rebuilt from storage, so its list is empty). They go through `EventDispatcherContract` after `commit()`, never before and never on rollback. A failing dispatch after commit is logged and the Result stays success. The Entity never dispatches its own events.
 - [ ] **Result Pattern:** every Service method returns `Result` carrying a `{ModuleName}ResponseDTO` (never an Entity or Model). No exception leaks upward.
 - [ ] **Domain error keys:** `errorCode` values are keys like `{MODULE}_NOT_FOUND`, `{MODULE}_SLUG_CONFLICT`, never raw HTTP statuses.
 - [ ] **Duplicate failure messages/error codes** are DRY'd up through a helper method (e.g. `rollbackAndFail(...)`).
@@ -184,6 +184,8 @@ public function update{ModuleName}(int $id, {ModuleName}UpdateDTO ${entity}Updat
         // Business rules run INSIDE the Entity, which returns a NEW instance.
         $updated{ModuleName}Entity = ${entity}Entity->applyChanges(/* from the DTO */);
 
+        $events = $updated{ModuleName}Entity->releaseEvents(); // BEFORE persisting
+
         $saved{ModuleName}Entity = $this->{entity}Repository->update($updated{ModuleName}Entity);
 
         $this->transactionManager->commit();
@@ -208,7 +210,7 @@ public function update{ModuleName}(int $id, {ModuleName}UpdateDTO ${entity}Updat
 
     // Committed. Side effects below are logged on failure and never undo the update.
     $this->removeOldFileQuietly(/* old path, only if a new file replaced it */);
-    $this->dispatchEventsQuietly($updated{ModuleName}Entity);
+    $this->dispatchEventsQuietly($events);
 
     return Result::success(
         data: $this->responseMapper->toResponseDTO($saved{ModuleName}Entity),
@@ -223,6 +225,18 @@ private function rollbackAndFail(string $message, string $errorCode, ?string $up
 
     return Result::failure(message: $message, errorCode: $errorCode);
 }
+
+/** @param list<object> $events */
+private function dispatchEventsQuietly(array $events): void
+{
+    try {
+        foreach ($events as $event) {
+            $this->eventDispatcher->dispatch($event);
+        }
+    } catch (\Throwable $exception) {
+        $this->logger->error('Could not dispatch {module} update events: ' . $exception->getMessage());
+    }
+}
 ```
 
 ## Review Workflow
@@ -230,7 +244,7 @@ private function rollbackAndFail(string $message, string $errorCode, ?string $up
 1. Read files in this order: Controller -> Command Service -> Entity -> Repository -> BaseRepository -> View.
 2. Check each layer against its checklist above, paying special attention to the **Command Service's transaction/rollback, row-lock, file-cleanup, and event sections**, where most bugs are found.
 3. Report findings by severity:
-    - 🔴 **Critical** (data integrity/transaction bug): early return without rollback, `findById()` instead of `findByIdForUpdate()` inside the transaction, domain exception falling through to the generic catch, orphaned or prematurely deleted file, events dispatched before commit, a cleanup failure reported as a failed update.
+    - 🔴 **Critical** (data integrity/transaction bug): early return without rollback, `findById()` instead of `findByIdForUpdate()` inside the transaction, domain exception falling through to the generic catch, orphaned or prematurely deleted file, events dispatched before commit, events released from the repository-returned Entity (always empty), a cleanup failure reported as a failed update.
     - 🟡 **Design concern:** business rule in the Service instead of the Entity, DRY violations, Entity/Model returned from the Service, ternary instead of guard clause, raw HTTP status in `errorCode`, framework import in Core.
 4. Tests are paused (`AGENTS.md` - UNIT TESTING POLICY): do not review, write, or require them.
 5. If the same bug class could plausibly occur in another module (Auth, Product, etc.), flag it and suggest adding it to this skill's Known Bug Watchlist.

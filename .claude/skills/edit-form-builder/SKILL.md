@@ -7,9 +7,9 @@ description: Builds the Edit Form feature for a module (route, index link, contr
 
 Implement the `{ModuleName}` Edit Form feature based on the following specifications. **Ensure strict adherence to our Hexagonal Architecture.**
 
-> **This work follows the Rich Domain Model.** Business rules live in the Entity, and Services are orchestrators only. The edit form is a **read** use case, so it goes through a Query Service. Read `AGENTS.md`, and load `.claude/rules/05-rich-domain-and-services.txt` and `.claude/rules/06-ports-and-portability.txt` before writing code.
+> **This work follows the Rich Domain Model.** Business rules live in the Entity, and Services are orchestrators only. The edit form is a **read** use case, so it goes through a Query Service. Read `AGENTS.md`, and load `.claude/rules/02-framework-adapter-laravel.txt` (route and Eloquent mapping rules), `05-rich-domain-and-services.txt`, and `06-ports-and-portability.txt` before writing code.
 
-> **On the code snippets below:** each one is a **reference implementation** showing the expected logic, structure, and step order — it is not a literal drop-in. Before writing any method, verify the exact signatures (`Result`, mapper methods, logger calls, etc.) and style conventions against **CLAUDE.md / AGENTS.md** and the existing codebase. If the real signature or convention differs from the reference, follow the real one — never the placeholder.
+> **On the code snippets below:** each one is a **reference implementation** showing the expected logic, structure, and step order — it is not a literal drop-in. Before writing any method, verify the exact signatures (`Result`, mapper methods, logger calls, etc.) and style conventions against **AGENTS.md** and the existing codebase. If the real signature or convention differs from the reference, follow the real one — never the placeholder.
 
 > **Placeholders used in this template:**
 > - `{ModuleName}` — PascalCase entity name (e.g. `Category`, `Product`, `Brand`)
@@ -72,7 +72,7 @@ Update the "Edit" button in the index view table. Change the `href` attribute fr
 
 > **Namespace/Imports Note:** Ensure the controller imports `View`, `RedirectResponse`, and `Result` correctly — do not invent or assume a namespace; verify it against the existing codebase.
 
-Implement the `edit` method following the logic below (the code block is a reference — verify exact `Result`/return-type signatures against CLAUDE.md and the codebase). The method must:
+Implement the `edit` method following the logic below (the code block is a reference — verify exact `Result`/return-type signatures against AGENTS.md and the codebase). The method must:
 
 1. **Delegate to the Query Service** — call `${entity}QueryService->get{ModuleName}ById($id)`. The Controller must never talk to the Repository directly.
 2. **Get dependencies through the constructor.** Add `{ModuleName}QueryService` to the Controller's constructor (constructor property promotion) if it is not already injected. Do not inject it through the method.
@@ -102,7 +102,7 @@ public function edit(int $id): View|RedirectResponse
 
 **File:** `{ModuleName}QueryService.php`
 
-Implement the `get{ModuleName}ById` method following the logic below (the code block is a reference — verify `Result::failure`/`Result::success` signatures, mapper method name, and logger call format against CLAUDE.md and the codebase). The method must:
+Implement the `get{ModuleName}ById` method following the logic below (the code block is a reference — verify `Result::failure`/`Result::success` signatures, mapper method name, and logger call format against AGENTS.md and the codebase). The method must:
 
 1. **Fetch the entity** by calling `{entity}Repository->findById($id)`.
 2. **Handle the not-found case:** if the repository returns `null`, return `Result::failure()` with the error key `{MODULE}_NOT_FOUND` and a message stating the `{ModuleName}` was not found for that ID. Do not throw an exception for this case — it is an expected outcome, not a system error.
@@ -112,7 +112,7 @@ Implement the `get{ModuleName}ById` method following the logic below (the code b
 6. **Stay read-only.** No transaction manager, no event dispatcher, no queue, no repository write call.
 7. **Never return the raw Entity or Model directly** — the only valid return type from this method is `Result`.
 
-The Query Service constructor needs only the repository contract, the response mapper, and the logger (constructor property promotion). Do not inject `TransactionManagerContract`, `EventDispatcherContract`, `QueueContract`, `SlugCheckerContract`, or `FileUploaderContract` here.
+The Query Service constructor needs only the repository contract, the response mapper, and the logger (constructor property promotion). Do not inject `TransactionManagerContract`, `EventDispatcherContract`, `QueueContract`, `SlugGeneratorContract`, or `FileUploaderContract` here.
 
 ```php
 /**
@@ -156,11 +156,11 @@ public function get{ModuleName}ById(int $id): Result
 
 **Files:** `{ModuleName}RepositoryContract.php` (port) and `{ModuleName}Repository.php` (adapter)
 
-Declare `findById(int $id): ?{ModuleName}Entity` on the contract (only if it is not already declared), then implement it in the repository (the code block is a reference — verify the mapper's `toEntity` signature against CLAUDE.md and the codebase). The method must:
+Declare `findById(int $id): ?{ModuleName}Entity` on the contract (only if it is not already declared), then implement it in the repository (the code block is a reference — verify the mapper's `toEntity` signature against AGENTS.md and the codebase). The method must:
 
 1. **Fetch the raw record** using the internal `findRecord($id)` helper (Eloquent lookup lives here, not in the Service).
 2. **Return `null` immediately** if no record is found — do not throw, do not return an empty Entity.
-3. **Convert the Model to a Domain Entity** via `$this->mapper->toEntity($model->toArray())` — the Repository must never return a raw Eloquent Model to the Service layer.
+3. **Convert the Model to a Domain Entity** via `$this->mapper->toEntity($model->getAttributes())` (raw column values; never `toArray()`, which applies `$hidden`, casts, and date serialization) — the Repository must never return a raw Eloquent Model to the Service layer.
 4. **Return type must stay `?{ModuleName}Entity`** — nullable, never a bare Entity or a Result object (Result belongs to the Service layer, not the Repository).
 5. **Catch framework-specific failures** inside the adapter and rethrow them as a standard `RuntimeException`. Never swallow them silently.
 
@@ -173,7 +173,7 @@ public function findById(int $id): ?{ModuleName}Entity
         return null;
     }
 
-    return $this->mapper->toEntity(${entity}Model->toArray());
+    return $this->mapper->toEntity(${entity}Model->getAttributes());
 }
 ```
 
@@ -183,7 +183,7 @@ public function findById(int $id): ?{ModuleName}Entity
 
 **File:** `{ModuleName}ResponseMapper.php`
 
-Ensure the `toResponseDTO` method in `{ModuleName}ResponseMapper` utilizes `StorageContract` to resolve any file/thumbnail URL fields, if applicable. Follow the exact method signature and mapping convention already defined in CLAUDE.md / the existing codebase — do not invent a new mapper pattern.
+Ensure the `toResponseDTO` method in `{ModuleName}ResponseMapper` utilizes `StorageContract` to resolve any file/thumbnail URL fields, if applicable. Follow the exact method signature and mapping convention already defined in AGENTS.md / the existing codebase — do not invent a new mapper pattern.
 
 - The mapper lives in the Application layer, so it depends on the `StorageContract` **port** only, never on a framework storage class or facade.
 - If `StorageContract` has no concrete adapter yet, the Adapter Co-Generation Mandate applies: create the adapter under `core/Shared/Infrastructure/` and bind it once in the composition root (`AppServiceProvider`). Do not call `Storage::url()` or `asset()` inside the mapper.
@@ -216,7 +216,7 @@ Testing is paused (`AGENTS.md` - UNIT TESTING POLICY). Do not write or claim tes
 
 The agent must self-verify against every item below **by checking the actual generated code**, not from memory. Claim only what the code really contains. A false claim is a defect.
 
-- [ ] **Code snippets in this file are reference implementations, not literal code.** Verify every signature and convention against CLAUDE.md / AGENTS.md and the existing codebase before writing — CLAUDE.md is the style authority, not this template.
+- [ ] **Code snippets in this file are reference implementations, not literal code.** Verify every signature and convention against AGENTS.md and the existing codebase before writing — AGENTS.md is the style authority, not this template.
 - [ ] **No invented method signatures.** Every method called (`findById`, `toResponseDTO`, `Result::failure`, etc.) must match the exact signature already defined elsewhere in the codebase — never assume a signature; check first.
 - [ ] **No invented namespaces/imports.** All `use` statements must be verified against the actual class locations, not guessed from naming convention.
 - [ ] **Route declared through `Route::resource()`** inside the existing group. No hand-written per-verb edit route.
