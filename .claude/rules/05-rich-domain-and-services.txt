@@ -334,6 +334,13 @@ R8. REPOSITORY CONTRACT SHAPE (ENTITY-BASED)
   BaseRepository::findRecordForUpdate(). findById() stays the plain read.
 - Takes and returns ENTITIES. No loose arrays or DataObjects between Service
   and Repository.
+- A repository write method that mutates an existing Entity RETURNS the
+  persisted Entity (e.g. updateStatus(Entity): Entity), so the Service maps the
+  stored values without a second read. A `void` return forces the Service to
+  either map stale pre-write data (a wrong timestamp in the response) or issue
+  a redundant read to fetch it back. Neither is acceptable. The adapter
+  satisfies this without an extra query: it maps the model the write already
+  returned.
 - The Infrastructure repository converts with <Module>EntityMapper:
   toEntity(array) and toPersistenceArray(Entity).
 - Read-only methods for Query Services may be split into a separate read

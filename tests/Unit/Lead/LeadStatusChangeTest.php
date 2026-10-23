@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Lead;
 
 use Core\Lead\Application\Contracts\LeadQueryContract;
+use Core\Lead\Application\DTOs\Responses\LeadResponseDTO;
 use Core\Lead\Application\Mappers\LeadResponseMapper;
 use Core\Lead\Application\Services\LeadService;
 use Core\Lead\Domain\Contracts\LeadRepositoryContract;
@@ -19,7 +20,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class LeadStatusChangeTest extends TestCase
 {
-    private function makeLead(LeadStatus $status): LeadEntity
+    private function makeLead(LeadStatus $status, ?string $updatedAt = null): LeadEntity
     {
         return new LeadEntity(
             id: 7,
@@ -30,17 +31,27 @@ final class LeadStatusChangeTest extends TestCase
             status: $status,
             source: 'referral',
             createdAt: '2026-10-05 10:13:16',
-            updatedAt: '2026-10-05 10:13:16',
+            updatedAt: $updatedAt ?? '2026-10-05 10:13:16',
         );
     }
 
     /**
      * @return LeadRepositoryContract&MockObject
      */
-    private function makeRepository(?LeadEntity $lead): LeadRepositoryContract
+    private function makeRepository(?LeadEntity $lead, ?string $writtenAt = null): LeadRepositoryContract
     {
         $repository = $this->createMock(LeadRepositoryContract::class);
         $repository->method('findEntityById')->willReturn($lead);
+
+        // saveStatus returns a stored LeadEntity. PHPUnit cannot double a final
+        // class to invent a return value, so the callback returns a real one
+        // carrying the timestamp the write produced.
+        $repository->method('saveStatus')->willReturnCallback(
+            fn(LeadEntity $savedLead) => $this->makeLead(
+                $savedLead->getStatus(),
+                $writtenAt ?? $savedLead->updatedAt,
+            )
+        );
 
         return $repository;
     }
@@ -58,9 +69,14 @@ final class LeadStatusChangeTest extends TestCase
     public function test_it_moves_the_lead_and_saves_the_new_status(): void
     {
         $repository = $this->makeRepository($this->makeLead(LeadStatus::NEW));
+        // expects() replaces the stub's return value, so the callback has to be
+        // repeated here: it both asserts the argument and supplies the entity.
         $repository->expects($this->once())
             ->method('saveStatus')
-            ->with($this->callback(fn(LeadEntity $lead) => $lead->getStatus() === LeadStatus::CONTACTED));
+            ->with($this->callback(fn(LeadEntity $lead) => $lead->getStatus() === LeadStatus::CONTACTED))
+            ->willReturnCallback(
+                fn(LeadEntity $savedLead) => $this->makeLead($savedLead->getStatus())
+            );
 
         $result = $this->makeService($repository)->changeStatus(7, LeadStatus::CONTACTED);
 
@@ -74,8 +90,26 @@ final class LeadStatusChangeTest extends TestCase
 
         $result = $this->makeService($repository)->changeStatus(7, LeadStatus::CONTACTED);
 
-        $this->assertInstanceOf(LeadEntity::class, $result->getData());
-        $this->assertSame(LeadStatus::CONTACTED, $result->getData()->getStatus());
+        // The Service owes delivery a ResponseDTO, never a domain entity.
+        $this->assertInstanceOf(LeadResponseDTO::class, $result->getData());
+        $this->assertSame(LeadStatus::CONTACTED->value, $result->getData()->status);
+        $this->assertSame('Contacted', $result->getData()->status_label);
+    }
+
+    /**
+     * The response must carry the timestamp the write produced, not the one the
+     * entity was loaded with.
+     */
+    public function test_it_reports_the_post_write_timestamp(): void
+    {
+        $repository = $this->makeRepository(
+            $this->makeLead(LeadStatus::NEW),
+            writtenAt: '2026-10-23 09:46:47',
+        );
+
+        $result = $this->makeService($repository)->changeStatus(7, LeadStatus::CONTACTED);
+
+        $this->assertSame('2026-10-23T09:46:47+00:00', $result->getData()->updated_at);
     }
 
     public function test_it_returns_a_not_found_failure_when_the_lead_is_missing(): void

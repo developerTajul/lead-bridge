@@ -190,6 +190,11 @@ final class ApiCompanyIndexTest extends TestCase
                 );
             }
 
+            public function findById(int $id): ?CompanyEntity
+            {
+                return null;
+            }
+
             /**
              * The list endpoint never asks for a detail read; the contract
              * still has to be satisfied in full.

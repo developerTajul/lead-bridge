@@ -5,35 +5,43 @@ declare(strict_types=1);
 namespace Core\User\Domain\Contracts;
 
 use Core\Auth\Domain\Enums\AuthRole;
-use Core\Auth\Domain\Enums\AuthStatus;
-use Core\User\Domain\DataObjects\UserData;
-use Core\User\Domain\Entities\UserEntity;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
+use Core\User\Domain\Entities\UserEntity;
 
 /**
- * Persistence interface for the User module. Application code depends
- * on this contract, keeping infrastructure details like Eloquent out of the core.
+ * PORT: persistence for user accounts.
+ *
+ * Takes and returns Entities only. The write side reads and writes accounts
+ * through this contract; the read side has its own port and read model.
  */
 interface UserRepositoryContract
 {
     /**
-     * Creates a new user and returns it as a Domain Entity.
+     * Stores a new user and returns it as a Domain Entity.
      *
-     * @param UserData $userData
+     * @param UserEntity $user The unsaved user.
      *
-     * @return UserEntity
+     * @return UserEntity The stored user, carrying the assigned id.
      */
-    public function create(UserData $userData): UserEntity;
+    public function create(UserEntity $user): UserEntity;
 
     /**
-     * Returns a paginated list of users, optionally restricted to one role.
+     * Stores changes to an existing user.
      *
-     * @param int           $perPage    Items per page (default: 10).
-     * @param AuthRole|null $roleFilter Restrict results to this role; null returns all roles.
+     * @param UserEntity $user The user to write, carrying its id.
      *
-     * @return PaginatedResult
+     * @return UserEntity The stored user.
      */
-    public function paginate(int $perPage = 10, ?AuthRole $roleFilter = null): PaginatedResult;
+    public function update(UserEntity $user): UserEntity;
+
+    /**
+     * Stores a change to the user's account status alone.
+     *
+     * @param UserEntity $user Carries the account whose status changes.
+     *
+     * @return UserEntity The stored user.
+     */
+    public function updateStatus(UserEntity $user): UserEntity;
 
     /**
      * Finds a user by email.
@@ -54,7 +62,8 @@ interface UserRepositoryContract
     public function findById(int $id): ?UserEntity;
 
     /**
-     * Finds a user by ID with row-level locking (SELECT ... FOR UPDATE).
+     * Finds a user by ID while holding a row lock, for use cases that read a
+     * user and then write it back inside a transaction.
      *
      * @param int $id The user ID.
      *
@@ -63,24 +72,14 @@ interface UserRepositoryContract
     public function findByIdForUpdate(int $id): ?UserEntity;
 
     /**
-     * Updates a user by ID.
+     * Returns a paginated list of users, optionally restricted to one role.
      *
-     * @param int    $id       The user ID.
-     * @param UserData $userData The updated data.
+     * @param int           $perPage    Items per page (default: 10).
+     * @param AuthRole|null $roleFilter Restrict results to this role; null returns all roles.
      *
-     * @return UserEntity|null Null when not found.
+     * @return PaginatedResult Items are UserEntity instances.
      */
-    public function update(int $id, UserData $userData): ?UserEntity;
-
-    /**
-     * Updates only the account status of a user.
-     *
-     * @param int        $id     The user ID.
-     * @param AuthStatus $status The new account status.
-     *
-     * @return UserEntity|null Null when not found.
-     */
-    public function updateStatus(int $id, AuthStatus $status): ?UserEntity;
+    public function paginate(int $perPage = 10, ?AuthRole $roleFilter = null): PaginatedResult;
 
     /**
      * Deletes a user by ID.

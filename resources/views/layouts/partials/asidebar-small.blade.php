@@ -201,6 +201,78 @@
                                                     </li>
                                                 </ul>
                                             </li>
+
+                                            <li class="mx-sm-sidenav__list mx-sm-sidenav__has-sub @if (request()->routeIs('admin.deals.*')) active @endif">
+                                                <a href="#" class="mx-sm-sidenav__link">
+                                                    <span class="mx-sm-sidenav__icon t-mr-8">
+                                                        <i class='bx bx-briefcase'></i>
+                                                    </span>
+                                                    <span class="mx-sm-sidenav__text text-capitalize">
+                                                        Deals
+                                                    </span>
+                                                </a>
+                                                {{-- Opened on load when the current page is in this branch. --}}
+                                                <ul class="t-list mx-sm-sidenav__sub @if (! request()->routeIs('admin.deals.*')) mx-sm-sidenav__sub--hide @endif">
+                                                    <li class="mx-sm-sidenav__sub-list">
+                                                        <a href="{{ route('admin.deals.create') }}"
+                                                            class="mx-sm-sidenav__sub-link @if (request()->routeIs('admin.deals.create')) active-page @endif">
+                                                            <span class="mx-sm-sidenav__sub-icon t-mr-8">
+                                                                <i class='bx bx-plus-circle'></i>
+                                                            </span>
+                                                            <span class="mx-sm-sidenav__sub-text text-capitalize">
+                                                                Create Deal
+                                                            </span>
+                                                        </a>
+                                                    </li>
+                                                    <li class="mx-sm-sidenav__sub-list">
+                                                        <a href="{{ route('admin.deals.index') }}"
+                                                            class="mx-sm-sidenav__sub-link @if (request()->routeIs('admin.deals.index')) active-page @endif">
+                                                            <span class="mx-sm-sidenav__sub-icon t-mr-8">
+                                                                <i class='bx bx-list-ul'></i>
+                                                            </span>
+                                                            <span class="mx-sm-sidenav__sub-text text-capitalize">
+                                                                Deals List
+                                                            </span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </li>
+
+                                            <li class="mx-sm-sidenav__list mx-sm-sidenav__has-sub @if (request()->routeIs('admin.pipelines.*')) active @endif">
+                                                <a href="#" class="mx-sm-sidenav__link">
+                                                    <span class="mx-sm-sidenav__icon t-mr-8">
+                                                        <i class='bx bx-columns'></i>
+                                                    </span>
+                                                    <span class="mx-sm-sidenav__text text-capitalize">
+                                                        Pipelines
+                                                    </span>
+                                                </a>
+                                                {{-- Opened on load when the current page is in this branch. --}}
+                                                <ul class="t-list mx-sm-sidenav__sub @if (! request()->routeIs('admin.pipelines.*')) mx-sm-sidenav__sub--hide @endif">
+                                                    <li class="mx-sm-sidenav__sub-list">
+                                                        <a href="{{ route('admin.pipelines.create') }}"
+                                                            class="mx-sm-sidenav__sub-link @if (request()->routeIs('admin.pipelines.create')) active-page @endif">
+                                                            <span class="mx-sm-sidenav__sub-icon t-mr-8">
+                                                                <i class='bx bx-plus-circle'></i>
+                                                            </span>
+                                                            <span class="mx-sm-sidenav__sub-text text-capitalize">
+                                                                Create Pipeline
+                                                            </span>
+                                                        </a>
+                                                    </li>
+                                                    <li class="mx-sm-sidenav__sub-list">
+                                                        <a href="{{ route('admin.pipelines.index') }}"
+                                                            class="mx-sm-sidenav__sub-link @if (request()->routeIs('admin.pipelines.index')) active-page @endif">
+                                                            <span class="mx-sm-sidenav__sub-icon t-mr-8">
+                                                                <i class='bx bx-list-ul'></i>
+                                                            </span>
+                                                            <span class="mx-sm-sidenav__sub-text text-capitalize">
+                                                                Pipelines List
+                                                            </span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </li>
                                         </ul>
                                     </div>
                                 </div>

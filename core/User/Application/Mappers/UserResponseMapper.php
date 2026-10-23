@@ -9,18 +9,28 @@ use Core\User\Domain\Entities\UserEntity;
 
 /**
  * Maps UserEntity to UserResponseDTO.
+ *
+ * That this response never carries the password or the remember token is the
+ * entity's decision, not the DTO's.
  */
 final class UserResponseMapper
 {
-    public function toResponseDTO(UserEntity $entity): UserResponseDTO
+    /**
+     * Builds the response DTO from a stored user.
+     *
+     * @param UserEntity $user
+     *
+     * @return UserResponseDTO
+     */
+    public function toResponseDTO(UserEntity $user): UserResponseDTO
     {
         return new UserResponseDTO(
-            id: $entity->id,
-            name: $entity->name,
-            email: $entity->email,
-            image: $entity->image,
-            role: $entity->role->value,
-            status: $entity->status->value,
+            id: (int) $user->id,
+            name: $user->name,
+            email: $user->email,
+            image: $user->image,
+            role: $user->role->value,
+            status: $user->status->value,
         );
     }
 }

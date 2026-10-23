@@ -58,7 +58,7 @@ final class LeadConversionService
             // failed write leaves nothing half-changed.
             $convertedLead = $lead->converted();
 
-            $this->leadRepository->saveStatus($convertedLead);
+            $savedLead = $this->leadRepository->saveStatus($convertedLead);
 
             $this->transactionManager->commit();
         } catch (InvalidLeadException $exception) {
@@ -79,16 +79,17 @@ final class LeadConversionService
             );
         }
 
-        // The entity in hand was loaded before the write, so its timestamps are
-        // the ones the row carried beforehand. The moment of conversion is now.
+        // The conversion is stamped when it happens rather than from the row.
+        // The stored updated_at moves with the write, but converted_at records
+        // the moment the lead was qualified into a deal.
         $convertedAt = new DateTimeImmutable();
 
         // Past this point the write has committed: a failing listener must not
         // turn a converted lead into a reported failure.
-        $this->dispatchConvertedEvent($convertedLead, $convertedAt);
+        $this->dispatchConvertedEvent($savedLead, $convertedAt);
 
         return Result::success(
-            data: $this->toResponseDTO($convertedLead, $convertedAt),
+            data: $this->toResponseDTO($savedLead, $convertedAt),
             message: 'Lead converted successfully.',
         );
     }

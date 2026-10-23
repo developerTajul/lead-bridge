@@ -5,26 +5,52 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Web\Backend;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use Core\Dashboard\Application\Contracts\DashboardMapperContract;
+use Core\Dashboard\Application\Services\DashboardQueryService;
 use Illuminate\View\View;
 
 /**
- * Shows the dashboard, adapting the content to the user's role.
+ * Shows the dashboard page.
  */
 final class DashboardController extends Controller
 {
     /**
-     * Displays the dashboard for staff and member users.
+     * @param DashboardQueryService   $dashboardQuery
+     * @param DashboardMapperContract $mapper
+     */
+    public function __construct(
+        private readonly DashboardQueryService $dashboardQuery,
+        private readonly DashboardMapperContract $mapper,
+    ) {}
+
+    /**
+     * Shows the dashboard.
      *
-     * @param Request $request
+     * A failing read does not fail the page: it renders with an error message
+     * and empty panels, so a user still reaches the navigation and the rest of
+     * the app rather than a stack trace.
      *
      * @return View
      */
-    public function index(Request $request): View
+    public function index(): View
     {
-        $user = $request->user();
+        $result = $this->dashboardQuery->getOverview($this->mapper->mapToFilterDTO());
 
-        return view('admin.dashboard', $user);
+        if ($result->isFailure()) {
+            return view('admin.dashboard', [
+                'metrics' => null,
+                'stages' => [],
+                'upcomingActivities' => [],
+                'error' => $result->getMessage(),
+            ]);
+        }
+
+        $overview = $result->getData();
+
+        return view('admin.dashboard', [
+            'metrics' => $overview->metrics,
+            'stages' => $overview->stages,
+            'upcomingActivities' => $overview->upcomingActivities,
+        ]);
     }
-
 }

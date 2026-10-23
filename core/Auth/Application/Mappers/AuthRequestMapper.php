@@ -6,6 +6,7 @@ namespace Core\Auth\Application\Mappers;
 
 use Core\Auth\Application\Contracts\AuthMapperContract;
 use Core\Auth\Application\DTOs\Requests\LoginRequestDTO;
+use Core\Auth\Application\DTOs\Requests\ProfileRequestDTO;
 use Core\Auth\Application\DTOs\Requests\RegisterRequestDTO;
 
 /**
@@ -41,5 +42,15 @@ final class AuthRequestMapper implements AuthMapperContract
             email: $validatedData['email'],
             password: $validatedData['password'],
         );
+    }
+
+    /**
+     * Builds a ProfileRequestDTO for the user being read.
+     *
+     * @param int $userId
+     */
+    public function mapToProfileDTO(int $userId): ProfileRequestDTO
+    {
+        return new ProfileRequestDTO(userId: $userId);
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Core\Auth\Application\Services;
 
 use Core\Auth\Application\DTOs\Requests\LoginRequestDTO;
+use Core\Auth\Application\DTOs\Requests\ProfileRequestDTO;
 use Core\Auth\Application\DTOs\Requests\RegisterRequestDTO;
 use Core\Auth\Application\Mappers\AuthResponseMapper;
 use Core\Auth\Domain\Contracts\AuthRepositoryContract;
@@ -127,11 +128,18 @@ final class AuthService
 
 
 
-    public function getProfile(int $userId): Result
+    /**
+     * Reads the profile of the given user.
+     *
+     * @param ProfileRequestDTO $profileDTO
+     *
+     * @return Result Contains the AuthResponseDTO on success.
+     */
+    public function getProfile(ProfileRequestDTO $profileDTO): Result
     {
 
         try {
-            $user = $this->authRepository->findById($userId);
+            $user = $this->authRepository->findById($profileDTO->userId);
 
             if ($user === null) {
                 return Result::failure(

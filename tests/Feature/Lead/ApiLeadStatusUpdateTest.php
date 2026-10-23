@@ -100,10 +100,11 @@ final class ApiLeadStatusUpdateTest extends TestCase
     }
 
     /**
-     * The write path returns a bare entity, so the controller reads the lead
-     * back. If that read fails the response must not claim success.
+     * The write itself is what answers the request now: there is no read-back
+     * to fail, so a successful write is a successful response and the controller
+     * never touches the read port.
      */
-    public function test_it_reports_a_failure_when_the_read_back_fails(): void
+    public function test_it_answers_from_the_write_without_reading_the_lead_back(): void
     {
         $this->app->instance(LeadServiceInterface::class, $this->makeStubService(
             readResult: Result::failure('Failed to retrieve lead.', 'LEAD_FETCH_FAILED'),
@@ -111,8 +112,10 @@ final class ApiLeadStatusUpdateTest extends TestCase
 
         $response = $this->patchJson('/api/v1/leads/7/status', ['status' => 'contacted']);
 
-        $response->assertStatus(400);
-        $response->assertJsonPath('status', 'error');
+        $response->assertOk();
+        $response->assertJsonPath('status', 'success');
+        $response->assertJsonPath('data.id', 7);
+        $response->assertJsonPath('data.status', 'contacted');
     }
 
     private function bindStubService(): void
@@ -160,7 +163,7 @@ final class ApiLeadStatusUpdateTest extends TestCase
                 $this->receivedStatus = $status;
 
                 return $this->changeStatusResult ?? Result::success(
-                    data: null,
+                    data: $this->makeResponseDTO($leadId),
                     message: 'Lead status updated successfully.',
                 );
             }

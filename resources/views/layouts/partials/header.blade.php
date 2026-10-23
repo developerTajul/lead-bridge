@@ -945,7 +945,7 @@
                                                 <hr class="mx-hr bg-light m-0">
                                             </li>
                                             <li class="mx-author-menu__list">
-                                                <a href="#"
+                                                <a href="{{ route('profile') }}"
                                                     class="mx-author-menu__link text-capitalize">
                                                     <div
                                                         class="d-flex align-items-center">

@@ -28,20 +28,16 @@ final class LaravelTransactionManager implements TransactionManagerContract
         DB::rollBack();
     }
 
+    /**
+     * Runs the callback in a transaction, letting Laravel pick the level: a
+     * savepoint when a transaction is already open, a real one otherwise.
+     *
+     * @param callable $callback
+     *
+     * @return mixed
+     */
     public function run(callable $callback): mixed
     {
-        $this->beginTransaction();
-
-        try {
-            $result = $callback();
-
-            $this->commit();
-
-            return $result;
-        } catch (\Throwable $exception) {
-            $this->rollback();
-
-            throw $exception;
-        }
+        return DB::transaction($callback);
     }
 }

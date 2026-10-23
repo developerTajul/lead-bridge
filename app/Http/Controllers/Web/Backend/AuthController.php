@@ -76,6 +76,22 @@ final class AuthController extends Controller
     }
 
     /**
+     * Shows the authenticated user's profile.
+     */
+    public function me(Request $request): View|RedirectResponse
+    {
+        $profileDTO = $this->mapper->mapToProfileDTO((int) $request->user()->id);
+
+        $result = $this->authService->getProfile($profileDTO);
+
+        if ($result->isFailure()) {
+            return redirect()->route('dashboard')->with('error', $result->getMessage());
+        }
+
+        return view('auth.profile', ['profile' => $result->getData()]);
+    }
+
+    /**
      * Logs the user out.
      */
     public function logout(Request $request): RedirectResponse

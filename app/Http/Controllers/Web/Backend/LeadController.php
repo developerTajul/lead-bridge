@@ -19,12 +19,9 @@ use Illuminate\View\View;
  */
 final class LeadController extends Controller
 {
-    private const DEFAULT_PER_PAGE = 15;
-
-    private const INVALID_FILTER_WARNING = 'Invalid filter applied. Showing unfiltered results.';
 
     public function __construct(
-        private readonly LeadServiceInterface $leads,
+        private readonly LeadServiceInterface $leadService,
         private readonly LeadMapperContract $mapper,
     ) {}
 
@@ -37,40 +34,37 @@ final class LeadController extends Controller
      */
     public function index(Request $request): View
     {
-        // A stale bookmark or hand-edited URL must not break the list, so an
-        // unusable filter value is dropped and reported instead of rejected.
         $queryParams = $request->query();
-        $queryParams['per_page'] = min(
-            (int) $request->input('per_page', self::DEFAULT_PER_PAGE),
-            LeadRules::MAX_PER_PAGE,
+
+        $queryParams['per_page'] = max(
+            LeadRules::MIN_PER_PAGE, 
+            min(
+                (int) $request->input('per_page', LeadRules::DEFAULT_PER_PAGE), 
+                LeadRules::MAX_PER_PAGE
+            )
         );
 
         [$leadFilterDTO, $ignoredFilters] = $this->mapper->mapToFilterDTOLenient($queryParams);
 
         if ($ignoredFilters !== []) {
-            session()->flash('warning', self::INVALID_FILTER_WARNING);
+            session()->flash('warning', __('leads.invalid_filter'));
         }
 
-        $result = $this->leads->getLeads($leadFilterDTO);
+        $result = $this->leadService->getLeads($leadFilterDTO);
+
 
         if ($result->isFailure()) {
             return view('admin.leads.index', [
                 'leads' => [],
-                'pagination' => new PaginatedResult(
-                    items: [],
-                    total: 0,
-                    currentPage: 1,
-                    perPage: $leadFilterDTO->perPage,
-                    lastPage: 1,
-                ),
+                'pagination' => PaginatedResult::empty($leadFilterDTO->perPage), 
                 'statusOptions' => $this->mapper->toStatusOptions(),
                 'filters' => $queryParams,
                 'error' => $result->getMessage(),
             ]);
         }
 
-        /** @var PaginatedResult $paginatedLeads */
         $paginatedLeads = $result->getData();
+        
 
         return view('admin.leads.index', [
             'leads' => $paginatedLeads->items,
@@ -90,7 +84,7 @@ final class LeadController extends Controller
     public function store(LeadStoreRequest $request): RedirectResponse
     {
         $leadCreateDTO = $this->mapper->mapToCreateDTO($request->validated());
-        $result = $this->leads->createLead($leadCreateDTO);
+        $result = $this->leadService->createLead($leadCreateDTO);
 
         if ($result->isFailure()) {
             return back()->with('error', $result->getMessage())->withInput();

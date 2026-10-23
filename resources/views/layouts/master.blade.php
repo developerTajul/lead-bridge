@@ -57,6 +57,9 @@
     </div>
     <!-- Page Wrapper End -->
     @include('layouts.partials.scripts')
+    {{-- Page scripts run after the bundled ones, so they can rely on jQuery and
+         the other libraries already being loaded. --}}
+    @stack('scripts')
     @yield('scripts')
 </body>
 

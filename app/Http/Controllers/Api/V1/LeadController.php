@@ -129,18 +129,10 @@ final class LeadController extends Controller
             return $this->errorResponse($result->getMessage(), $result->errorCode, self::ERROR_INVALID);
         }
 
-        // The status write returns a bare entity, so read the lead back to
-        // answer with the same shape the other endpoints use.
-        $readResult = $this->leadService->getLeadById($lead);
-
-        if ($readResult->isFailure()) {
-            return $this->errorResponse($readResult->getMessage(), $readResult->errorCode, 'LEAD_NOT_FOUND');
-        }
-
         return response()->json([
             'status' => 'success',
             'message' => $result->getMessage(),
-            'data' => $readResult->getData(),
+            'data' => $result->getData(),
         ], Response::HTTP_OK);
     }
 

@@ -99,14 +99,30 @@ class AuthController extends Controller
 
 
 
+    /**
+     * Returns the authenticated user's profile.
+     */
     public function me(Request $request): JsonResponse
     {
-        $result = $this->authService->getProfile((int) $request->user()->id);
+        $profileDTO = $this->mapper->mapToProfileDTO((int) $request->user()->id);
+
+        $result = $this->authService->getProfile($profileDTO);
+
+        if ($result->isFailure()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $result->getMessage(),
+            ], 404);
+        }
+
+        /** @var \Core\Auth\Application\DTOs\Responses\AuthResponseDTO $dto */
+        $dto = $result->getData();
 
         return response()->json([
-            'status' => 'success',
-            'data'   => $result->getData(),
-        ]);
+            'status'  => 'success',
+            'message' => $result->getMessage(),
+            'data'    => $dto,
+        ], 200);
     }
 
 

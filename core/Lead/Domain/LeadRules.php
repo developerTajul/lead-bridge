@@ -18,4 +18,6 @@ final class LeadRules
      * The smallest page size a lead list may be asked for.
      */
     public const MIN_PER_PAGE = 1;
+
+    public const DEFAULT_PER_PAGE = 15;
 }

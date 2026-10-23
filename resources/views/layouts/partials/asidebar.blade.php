@@ -61,8 +61,8 @@
                         </ul>
                     </li>
 
-                    <li class="mx-sidenav__menu-item">
-                        <a href="{{ url('#') }}" class="mx-sidenav__menu-link">
+                    <li class="mx-sidenav__menu-item @if (request()->routeIs('profile')) active-page @endif">
+                        <a href="{{ route('profile') }}" class="mx-sidenav__menu-link">
                             <span class="mx-sidenav__menu-icon t-mr-15">
                                 <i class='bx bxs-user-account'></i>
                             </span>
@@ -205,6 +205,74 @@
                                     </span>
                                     <span class="mx-sidenav__sub-text text-capitalize">
                                         Activities List
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub @if (request()->routeIs('admin.deals.*')) active @endif">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bx-briefcase'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Deals
+                            </span>
+                        </a>
+                        {{-- Opened on load when the current page is in this branch. --}}
+                        <ul class="t-list mx-sidenav__sub @if (! request()->routeIs('admin.deals.*')) mx-sidenav__sub--hide @endif">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="{{ route('admin.deals.create') }}" class="mx-sidenav__sub-link @if (request()->routeIs('admin.deals.create')) active-page @endif">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-plus-circle'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Deal
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="{{ route('admin.deals.index') }}" class="mx-sidenav__sub-link @if (request()->routeIs('admin.deals.index')) active-page @endif">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-list-ul'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Deals List
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <li class="mx-sidenav__menu-item mx-sidenav__has-sub @if (request()->routeIs('admin.pipelines.*')) active @endif">
+                        <a href="#" class="mx-sidenav__menu-link">
+                            <span class="mx-sidenav__menu-icon t-mr-15">
+                                <i class='bx bx-columns'></i>
+                            </span>
+                            <span class="mx-sidenav__menu-text text-capitalize">
+                                Pipelines
+                            </span>
+                        </a>
+                        {{-- Opened on load when the current page is in this branch. --}}
+                        <ul class="t-list mx-sidenav__sub @if (! request()->routeIs('admin.pipelines.*')) mx-sidenav__sub--hide @endif">
+                            <li class="mx-sidenav__sub-item">
+                                <a href="{{ route('admin.pipelines.create') }}" class="mx-sidenav__sub-link @if (request()->routeIs('admin.pipelines.create')) active-page @endif">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-plus-circle'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Create Pipeline
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="mx-sidenav__sub-item">
+                                <a href="{{ route('admin.pipelines.index') }}" class="mx-sidenav__sub-link @if (request()->routeIs('admin.pipelines.index')) active-page @endif">
+                                    <span class="mx-sidenav__sub-icon t-mr-15">
+                                        <i class='bx bx-list-ul'></i>
+                                    </span>
+                                    <span class="mx-sidenav__sub-text text-capitalize">
+                                        Pipelines List
                                     </span>
                                 </a>
                             </li>

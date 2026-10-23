@@ -5,64 +5,129 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Activity;
-use App\Models\Deal;
-use App\Models\Lead;
+use Core\Dashboard\Application\Contracts\DashboardMapperContract;
+use Core\Dashboard\Application\Services\DashboardQueryService;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 final class DashboardController extends Controller
 {
     /**
-     * Get high-level CRM performance metrics for executive overview.
+     * @param DashboardQueryService   $dashboardQuery
+     * @param DashboardMapperContract $mapper
+     */
+    public function __construct(
+        private readonly DashboardQueryService $dashboardQuery,
+        private readonly DashboardMapperContract $mapper,
+    ) {}
+
+    /**
+     * Get the whole dashboard: the headline figures, the pipeline overview and
+     * the activity feed.
+     *
+     * @return JsonResponse
+     */
+    public function index(): JsonResponse
+    {
+        $result = $this->dashboardQuery->getOverview($this->mapper->mapToFilterDTO());
+
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->getMessage(),
+                'error_code' => $result->errorCode,
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        $overview = $result->getData();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $result->getMessage(),
+            'data' => [
+                'metrics' => $this->formatMetrics($overview->metrics),
+                'pipeline' => array_map($this->formatStage(...), $overview->stages),
+                'upcoming_activities' => $overview->upcomingActivities,
+            ],
+        ], Response::HTTP_OK);
+    }
+
+    /**
+     * Get the headline figures on their own.
+     *
+     * @return JsonResponse
      */
     public function metrics(): JsonResponse
     {
-        $totalDeals = Deal::count();
-        $wonDealsCount = Deal::where('deal_stage_id', 5)->count();
-        $lostDealsCount = Deal::where('deal_stage_id', 6)->count();
-        $openDealsCount = Deal::whereNotIn('deal_stage_id', [5, 6])->count();
+        $result = $this->dashboardQuery->getMetrics();
 
-        $totalWonRevenue = (float) Deal::where('deal_stage_id', 5)->sum('amount');
-        $openPipelineValue = (float) Deal::whereNotIn('deal_stage_id', [5, 6])->sum('amount');
-
-        $totalLeads = Lead::count();
-        $convertedLeads = Lead::where('status', 'converted')->count();
-        $conversionRate = $totalLeads > 0 
-            ? round(($convertedLeads / $totalLeads) * 100, 2) 
-            : 0.0;
-
-        $pendingActivitiesCount = Activity::whereNull('completed_at')->count();
-        $completedActivitiesCount = Activity::whereNotNull('completed_at')->count();
+        if ($result->isFailure()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $result->getMessage(),
+                'error_code' => $result->errorCode,
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Dashboard metrics retrieved successfully.',
-            'data'    => [
-                'revenue' => [
-                    'won_revenue'         => $totalWonRevenue,
-                    'open_pipeline_value' => $openPipelineValue,
-                    'currency'            => 'BDT',
-                ],
-                'deals' => [
-                    'total_deals' => $totalDeals,
-                    'won_deals'   => $wonDealsCount,
-                    'lost_deals'  => $lostDealsCount,
-                    'open_deals'  => $openDealsCount,
-                    'win_rate'    => ($wonDealsCount + $lostDealsCount) > 0 
-                        ? round(($wonDealsCount / ($wonDealsCount + $lostDealsCount)) * 100, 2) 
-                        : 0.0,
-                ],
-                'leads' => [
-                    'total_leads'     => $totalLeads,
-                    'converted_leads' => $convertedLeads,
-                    'conversion_rate' => $conversionRate,
-                ],
-                'activities' => [
-                    'pending'   => $pendingActivitiesCount,
-                    'completed' => $completedActivitiesCount,
-                ],
-            ],
+            'status' => 'success',
+            'message' => $result->getMessage(),
+            'data' => $this->formatMetrics($result->getData()),
         ], Response::HTTP_OK);
+    }
+
+    /**
+     * Groups the flat metrics payload into the panels the response reports.
+     * The DTO carries them flat because the Blade page reads them as scalars;
+     * a JSON client expects them grouped by the module they came from.
+     *
+     * @param \Core\Dashboard\Application\DTOs\Responses\DashboardMetricsResponseDTO $metrics
+     *
+     * @return array<string, mixed>
+     */
+    private function formatMetrics(\Core\Dashboard\Application\DTOs\Responses\DashboardMetricsResponseDTO $metrics): array
+    {
+        return [
+            'revenue' => [
+                'won_revenue' => $metrics->wonRevenue,
+                'open_pipeline_value' => $metrics->openPipelineValue,
+                'currency' => $metrics->currency,
+            ],
+            'deals' => [
+                'total_deals' => $metrics->totalDeals,
+                'won_deals' => $metrics->wonDeals,
+                'lost_deals' => $metrics->lostDeals,
+                'open_deals' => $metrics->openDeals,
+                'win_rate' => $metrics->winRate,
+            ],
+            'leads' => [
+                'total_leads' => $metrics->totalLeads,
+                'converted_leads' => $metrics->convertedLeads,
+                'conversion_rate' => $metrics->conversionRate,
+            ],
+            'activities' => [
+                'pending' => $metrics->pendingActivities,
+                'completed' => $metrics->completedActivities,
+            ],
+        ];
+    }
+
+    /**
+     * @param \Core\Dashboard\Application\DTOs\Responses\DashboardStageSummaryResponseDTO $stage
+     *
+     * @return array<string, mixed>
+     */
+    private function formatStage(\Core\Dashboard\Application\DTOs\Responses\DashboardStageSummaryResponseDTO $stage): array
+    {
+        return [
+            'id' => $stage->id,
+            'pipeline_id' => $stage->pipelineId,
+            'pipeline_name' => $stage->pipelineName,
+            'name' => $stage->name,
+            'order_position' => $stage->orderPosition,
+            'probability' => $stage->probability,
+            'deals_count' => $stage->dealsCount,
+            'total_value' => $stage->totalValue,
+        ];
     }
 }

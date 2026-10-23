@@ -35,13 +35,14 @@ interface LeadRepositoryContract
     public function findEntityById(int $id): ?LeadEntity;
 
     /**
-     * Persists the lead's current status.
+     * Persists the lead's current status and returns the stored row, so the
+     * caller maps post-write values instead of the ones it loaded.
      *
      * @param LeadEntity $lead
      *
-     * @return void
+     * @return LeadEntity
      */
-    public function saveStatus(LeadEntity $lead): void;
+    public function saveStatus(LeadEntity $lead): LeadEntity;
 
     public function findByEmail(string $email): ?LeadEntity;
     public function findByPhone(string $phone): ?LeadEntity;

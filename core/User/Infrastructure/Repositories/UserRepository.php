@@ -6,25 +6,23 @@ namespace Core\User\Infrastructure\Repositories;
 
 use App\Models\User;
 use Core\Auth\Domain\Enums\AuthRole;
-use Core\Auth\Domain\Enums\AuthStatus;
-use Core\User\Domain\Contracts\UserRepositoryContract;
-use Core\User\Domain\DataObjects\UserData;
-use Core\User\Domain\Entities\UserEntity;
-use Core\User\Infrastructure\Mappers\UserEntityMapper;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Core\Shared\Infrastructure\Repositories\BaseRepository;
+use Core\User\Domain\Contracts\UserRepositoryContract;
+use Core\User\Domain\Entities\UserEntity;
+use Core\User\Infrastructure\Mappers\UserEntityMapper;
 
 /**
  * Eloquent-backed persistence for users. The only place in the module
  * where Laravel/Eloquent is used; results are mapped to Domain Entities first.
  *
- * @implements \Core\User\Domain\Contracts\UserRepositoryContract
+ * @implements UserRepositoryContract
  */
 final class UserRepository extends BaseRepository implements UserRepositoryContract
 {
     /**
-     * @param User               $model
-     * @param UserEntityMapper   $mapper
+     * @param User             $model
+     * @param UserEntityMapper $mapper
      */
     public function __construct(
         User $model,
@@ -34,18 +32,60 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
     }
 
     /**
-     * @param UserData $userData
+     * Stores a new user and returns it with the id the table assigned.
+     *
+     * @param UserEntity $user
      *
      * @return UserEntity
      */
-    public function create(UserData $userData): UserEntity
+    public function create(UserEntity $user): UserEntity
     {
-        $userModel = $this->createRecord($userData->toArray());
+        $userModel = $this->createRecord($this->mapper->toPersistenceArray($user));
 
-        return $this->mapper->toEntity($userModel->toArray());
+        return $this->mapper->toEntity($this->rawColumns($userModel));
     }
 
     /**
+     * Stores changes to an existing user. The row is found by its id, so the
+     * entity's own id decides which row is written.
+     *
+     * @param UserEntity $user
+     *
+     * @return UserEntity The stored user.
+     */
+    public function update(UserEntity $user): UserEntity
+    {
+        $userModel = $this->updateRecord((int) $user->id, $this->mapper->toPersistenceArray($user));
+
+        if ($userModel === null) {
+            return $user;
+        }
+
+        return $this->mapper->toEntity($this->rawColumns($userModel));
+    }
+
+    /**
+     * Stores a change to the user's account status alone, leaving the rest of
+     * the row as it stands.
+     *
+     * @param UserEntity $user Carries the status to store.
+     *
+     * @return UserEntity The stored user.
+     */
+    public function updateStatus(UserEntity $user): UserEntity
+    {
+        $userModel = $this->updateRecord((int) $user->id, ['status' => $user->status->value]);
+
+        if ($userModel === null) {
+            return $user;
+        }
+
+        return $this->mapper->toEntity($this->rawColumns($userModel));
+    }
+
+    /**
+     * Finds a user by email.
+     *
      * @param string $email The user email.
      *
      * @return UserEntity|null Null when not found.
@@ -54,16 +94,16 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
     {
         $userModel = $this->model->where('email', $email)->first();
 
-        if (!$userModel) {
+        if (! $userModel instanceof User) {
             return null;
         }
 
-        // toArray() honours $hidden, which excludes the password — the
-        // login use case needs it, so clear the hidden list first.
-        return $this->mapper->toEntity($userModel->setHidden([])->toArray());
+        return $this->mapper->toEntity($this->rawColumns($userModel));
     }
 
     /**
+     * Finds a user by ID.
+     *
      * @param int $id The user ID.
      *
      * @return UserEntity|null Null when not found.
@@ -72,11 +112,11 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
     {
         $userModel = $this->findRecord($id);
 
-        if (!$userModel) {
+        if (! $userModel instanceof User) {
             return null;
         }
 
-        return $this->mapper->toEntity($userModel->toArray());
+        return $this->mapper->toEntity($this->rawColumns($userModel));
     }
 
     /**
@@ -90,62 +130,18 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
     {
         $userModel = $this->findRecordForUpdate($id);
 
-        if (!$userModel) {
+        if (! $userModel instanceof User) {
             return null;
         }
 
-        return $this->mapper->toEntity($userModel->toArray());
-    }
-
-    /**
-     * @param int      $id       The user ID.
-     * @param UserData $userData The updated data.
-     *
-     * @return UserEntity|null Null when not found.
-     */
-    public function update(int $id, UserData $userData): ?UserEntity
-    {
-        $userModel = $this->updateRecord($id, $userData->toArray());
-
-        if ($userModel === null) {
-            return null;
-        }
-
-        return $this->mapper->toEntity($userModel->toArray());
-    }
-
-    /**
-     * @param int        $id     The user ID.
-     * @param AuthStatus $status The new account status.
-     *
-     * @return UserEntity|null Null when not found.
-     */
-    public function updateStatus(int $id, AuthStatus $status): ?UserEntity
-    {
-        $userModel = $this->updateRecord($id, ['status' => $status->value]);
-
-        if ($userModel === null) {
-            return null;
-        }
-
-        return $this->mapper->toEntity($userModel->toArray());
-    }
-
-    /**
-     * @param int $id The user ID.
-     *
-     * @return bool True on success, false on failure.
-     */
-    public function delete(int $id): bool
-    {
-        return $this->deleteRecord($id);
+        return $this->mapper->toEntity($this->rawColumns($userModel));
     }
 
     /**
      * @param int           $perPage    Items per page (default: 10).
      * @param AuthRole|null $roleFilter Restrict results to this role; null returns all roles.
      *
-     * @return PaginatedResult
+     * @return PaginatedResult Items are UserEntity instances.
      */
     public function paginate(int $perPage = 10, ?AuthRole $roleFilter = null): PaginatedResult
     {
@@ -159,7 +155,7 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
 
         $entities = $paginator
             ->getCollection()
-            ->map(fn(User $item) => $this->mapper->toEntity($item->toArray()))
+            ->map(fn(User $item) => $this->mapper->toEntity($this->rawColumns($item)))
             ->all();
 
         return new PaginatedResult(
@@ -169,5 +165,33 @@ final class UserRepository extends BaseRepository implements UserRepositoryContr
             perPage: $paginator->perPage(),
             lastPage: $paginator->lastPage(),
         );
+    }
+
+    /**
+     * Deletes a user by ID.
+     *
+     * @param int $id The user ID.
+     *
+     * @return bool True on success, false on failure.
+     */
+    public function delete(int $id): bool
+    {
+        return $this->deleteRecord($id);
+    }
+
+    /**
+     * Returns a model's raw column values for the EntityMapper.
+     *
+     * getAttributes() is used rather than toArray(): toArray() applies the
+     * model's $hidden list and its casts, which would drop the password column
+     * the login use case needs and rewrite the timestamps.
+     *
+     * @param User $userModel
+     *
+     * @return array<string, mixed>
+     */
+    private function rawColumns(User $userModel): array
+    {
+        return $userModel->getAttributes();
     }
 }

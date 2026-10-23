@@ -15,6 +15,7 @@ use Core\Lead\Domain\ValueObjects\LeadFilter;
 use Core\Lead\Infrastructure\Mappers\LeadEntityMapper;
 use Core\Shared\Domain\DataObjects\PaginatedResult;
 use Core\Shared\Infrastructure\Repositories\BaseRepository;
+use RuntimeException;
 
 /**
  * Eloquent-backed persistence for leads.
@@ -44,7 +45,7 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
     {
         $leadModel = $this->createRecord($leadData->toArray());
 
-        return $this->mapper->toEntity($leadModel->toArray());
+        return $this->mapper->toEntity($leadModel->getAttributes());
     }
 
 
@@ -52,14 +53,14 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
     {
         $leadModel = $this->model->where('email', $email)->first();
 
-        return $leadModel ? $this->mapper->toEntity($leadModel->toArray()) : null;
+        return $leadModel ? $this->mapper->toEntity($leadModel->getAttributes()) : null;
     }
 
     public function findByPhone(string $phone): ?LeadEntity
     {
         $leadModel = $this->model->where('phone', $phone)->first();
 
-        return $leadModel ? $this->mapper->toEntity($leadModel->toArray()) : null;
+        return $leadModel ? $this->mapper->toEntity($leadModel->getAttributes()) : null;
     }
 
     /**
@@ -71,19 +72,28 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
     {
         $leadModel = $this->findRecord($id);
 
-        return $leadModel ? $this->mapper->toEntity($leadModel->toArray()) : null;
+        return $leadModel ? $this->mapper->toEntity($leadModel->getAttributes()) : null;
     }
 
     /**
-     * Persists the lead's current status.
+     * Persists the lead's current status and returns the stored row, so the
+     * caller maps post-write values instead of the ones it loaded.
      *
      * @param LeadEntity $lead
      *
-     * @return void
+     * @return LeadEntity
      */
-    public function saveStatus(LeadEntity $lead): void
+    public function saveStatus(LeadEntity $lead): LeadEntity
     {
-        $this->updateRecord($lead->id, ['status' => $lead->getStatus()->value]);
+        $leadModel = $this->updateRecord($lead->id, ['status' => $lead->getStatus()->value]);
+
+        // The row is gone between the load and the write; upstream already
+        // matched it, so failing loudly beats reporting a save that never happened.
+        if ($leadModel === null) {
+            throw new RuntimeException(sprintf('Lead %d disappeared during the status save.', $lead->id));
+        }
+
+        return $this->mapper->toEntity($leadModel->getAttributes());
     }
 
     /**
@@ -126,7 +136,7 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
 
         $projections = $eloquentPaginator
             ->getCollection()
-            ->map(fn(Lead $leadModel) => $this->mapper->toProjection($leadModel->toArray()))
+            ->map(fn(Lead $leadModel) => $this->mapper->toProjection($leadModel->getAttributes()))
             ->all();
 
         return new PaginatedResult(
@@ -151,6 +161,6 @@ final class LeadRepository extends BaseRepository implements LeadRepositoryContr
             return null;
         }
 
-        return $this->mapper->toProjection($leadModel->toArray());
+        return $this->mapper->toProjection($leadModel->getAttributes());
     }
 }

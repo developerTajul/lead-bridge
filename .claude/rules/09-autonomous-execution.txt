@@ -1,0 +1,51 @@
+================================================================================
+09 - AUTONOMOUS EXECUTION AND DECISION MAKING (STRICT)
+Source: AGENTS.md, RULE FILE INDEX #9
+Binding system instructions. 
+Load when: Always relevant - executing step-by-step instructions, resolving schema ambiguities, and handling minor implementation choices.
+================================================================================
+
+--------------------------------------------------------------------------------
+A1. NON-BLOCKING EXECUTION MANDATE (STRICT)
+--------------------------------------------------------------------------------
+
+1. NO MULTIPLE-CHOICE PROMPTING: When faced with a minor architectural ambiguity, incomplete schema context, or implementation choice (e.g., how to scope an entity's invariants, how to name a transient variable, whether to include a minor UI element), the AI MUST NOT halt execution to present multiple choices to the user.
+2. AUTOMATIC RESOLUTION: The AI MUST independently choose the safest, most standard path that strictly aligns with the Golden Rules (01-universal-philosophy.txt) and the existing Database Schema.
+3. HALT ONLY ON CRITICAL FAILURES: The AI should only halt and ask for user input if a decision fundamentally breaks the application architecture, requires a completely new unmentioned technology, or poses a severe security risk.
+
+--------------------------------------------------------------------------------
+A2. RESOLVING SCHEMA AND BUSINESS LOGIC AMBIGUITIES
+--------------------------------------------------------------------------------
+
+1. MIRROR DB CONSTRAINTS BY DEFAULT: If a business rule (like a specific status ID for "Won" or "Lost") is not explicitly defined in the prompt, the AI MUST NOT invent new business rules or semantic markers. Instead, it MUST fall back to mirroring the strict database constraints (e.g., required fields, max length, foreign key existence, numeric defaults) within the Entity and Form Requests.
+2. DEFER COMPLEX LOGIC: Treat the Entity as close to a data holder with minimal DB-driven invariants until explicit business rules are provided by the user in subsequent steps.
+
+--------------------------------------------------------------------------------
+A3. SELF-CORRECTION AND LINTING
+--------------------------------------------------------------------------------
+
+1. AUTONOMOUS FIXES: If a syntax error, framework-leak, or missing route is detected during the AI's internal self-audit (`php -l` or grep), the AI MUST autonomously fix the issue based on the `Agents.md` rules without asking for permission.
+2. SILENT RECOVERY: Transient tool failures or permission blocks should be retried automatically. 
+3. FINAL REPORTING: After completing a step and running autonomous fixes, the AI will provide a concise summary of what was built and fixed, and then wait for the user's explicit command to proceed to the next major step.
+
+--------------------------------------------------------------------------------
+A4. BASH SAFETY & LINTING COMMAND CONSTRAINTS (NO POP-UPS)
+--------------------------------------------------------------------------------
+
+1. NO COMPLEX COMMAND CHAINING: To prevent triggering Claude Code security classifiers and annoying confirmation pop-ups, the AI MUST NOT chain multiple `cd` and `&& php -l` commands into a single massive bash string.
+2. SIMPLIFIED SYNTAX: Run syntax checks (`php -l`) using clean, single file commands or brief, separate execution statements without complex directory-changing wrappers. Avoid recursive confirmation-triggering commands entirely.
+
+
+--------------------------------------------------------------------------------
+A5. RESILIENCE, BACKGROUND PROCESS CLEANUP & SELF-RECOVERY (STRICT)
+--------------------------------------------------------------------------------
+
+1. NO LEFTOVER BACKGROUND PROCESSES: The AI MUST NOT leave multiple background servers (`php artisan serve`) or hanging shell tasks running. Before starting a new verification or HTTP check, the AI must check for existing active background jobs and terminate or reuse them.
+2. AUTOMATIC RECOVERY FROM INTERRUPTIONS: If a tool use is interrupted, a database connection drops temporarily, or a background process blocks execution, the AI MUST NOT freeze or wait indefinitely for user intervention. It must autonomously assess the system state (e.g., check if MySQL is running, clean up leftover tokens or rows), resolve the blocker, and resume the active step.
+3. SILENT RETRY LIMIT: For transient environment issues (like service restarts), the AI is permitted up to 2 automatic retries. If it fails after 2 attempts, it must gracefully stop, record the block in the step report, trigger the alert, and halt safely without corrupting the codebase.
+
+
+
+================================================================================
+END OF 09 - AUTONOMOUS EXECUTION
+================================================================================

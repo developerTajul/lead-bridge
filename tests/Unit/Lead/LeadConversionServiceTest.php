@@ -35,12 +35,24 @@ final class LeadConversionServiceTest extends TestCase
         );
     }
 
+    /**
+     * saveStatus returns a stored LeadEntity. PHPUnit cannot double a final
+     * class to invent a return value, so the callback returns a real one.
+     */
+    private function stubSaveStatus(LeadRepositoryContract $repository): void
+    {
+        $repository->method('saveStatus')->willReturnCallback(
+            fn(LeadEntity $savedLead) => $this->makeLead($savedLead->getStatus())
+        );
+    }
+
     private function makeService(
         LeadRepositoryContract $repository,
         ?EventDispatcherContract $dispatcher = null,
     ): LeadConversionService {
+        // The port exposes beginTransaction/commit/rollback, not run(); the
+        // service body drives those three directly.
         $transaction = $this->createMock(TransactionManagerContract::class);
-        $transaction->method('run')->willReturnCallback(fn(callable $cb) => $cb());
 
         return new LeadConversionService(
             leadRepository: $repository,
@@ -55,11 +67,16 @@ final class LeadConversionServiceTest extends TestCase
         $repository = $this->createMock(LeadRepositoryContract::class);
         $repository->method('findEntityById')->willReturn($this->makeLead());
 
+        // expects() replaces the stub's return value, so the callback has to be
+        // repeated here: it both asserts the argument and supplies the entity.
         $repository->expects($this->once())
             ->method('saveStatus')
             ->with($this->callback(
                 fn(LeadEntity $lead) => $lead->getStatus() === LeadStatus::CONVERTED
-            ));
+            ))
+            ->willReturnCallback(
+                fn(LeadEntity $savedLead) => $this->makeLead($savedLead->getStatus())
+            );
 
         $result = $this->makeService($repository)->convert(7);
 
@@ -73,6 +90,7 @@ final class LeadConversionServiceTest extends TestCase
     {
         $repository = $this->createMock(LeadRepositoryContract::class);
         $repository->method('findEntityById')->willReturn($this->makeLead());
+        $this->stubSaveStatus($repository);
 
         $dispatcher = $this->createMock(EventDispatcherContract::class);
         $dispatcher->expects($this->once())
@@ -143,6 +161,7 @@ final class LeadConversionServiceTest extends TestCase
         // The entity carries the timestamp the row had before the write; the
         // response must not echo that back as the conversion time.
         $repository->method('findEntityById')->willReturn($this->makeLead());
+        $this->stubSaveStatus($repository);
 
         $before = new \DateTimeImmutable();
 
@@ -158,6 +177,7 @@ final class LeadConversionServiceTest extends TestCase
     {
         $repository = $this->createMock(LeadRepositoryContract::class);
         $repository->method('findEntityById')->willReturn($this->makeLead());
+        $this->stubSaveStatus($repository);
 
         $dispatcher = $this->createMock(EventDispatcherContract::class);
         $dispatcher->method('dispatch')->willThrowException(new RuntimeException('listener blew up'));

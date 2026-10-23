@@ -24,6 +24,13 @@ use Psr\Log\LoggerInterface;
  */
 final class UserServiceTest extends TestCase
 {
+    /**
+     * The entity refuses to be built from a plain-text password, so the fixture
+     * carries a real bcrypt hash. The password hasher is mocked in these tests,
+     * so the digest is never verified — it only has to be a genuine hash.
+     */
+    private const STORED_PASSWORD = '$2y$04$tw8QfuH3qzbVhlMOU7MhQe2XkPVxyWUYNh5lUgmPwVh6k33yqOm5S';
+
     private UserRepositoryContract $userRepository;
 
     private PasswordHasherContract $passwordHasher;
@@ -43,7 +50,7 @@ final class UserServiceTest extends TestCase
 
         $this->userService = new UserService(
             userRepository: $this->userRepository,
-            mapper: $this->responseMapper,
+            responseMapper: $this->responseMapper,
             transactionManager: $this->createMock(TransactionManagerContract::class),
             logger: $this->createMock(LoggerInterface::class),
             fileUploader: $this->createMock(FileUploaderContract::class),
@@ -136,7 +143,7 @@ final class UserServiceTest extends TestCase
             name: 'John Doe',
             email: 'john@example.com',
             emailVerifiedAt: null,
-            password: 'hashed-password',
+            password: self::STORED_PASSWORD,
             image: null,
             role: AuthRole::MEMBER,
             status: $status,

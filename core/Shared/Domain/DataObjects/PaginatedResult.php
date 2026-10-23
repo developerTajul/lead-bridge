@@ -37,4 +37,20 @@ final readonly class PaginatedResult
             lastPage: $this->lastPage,
         );
     }
+
+
+    /**
+     * Static factory method to create an empty pagination result.
+     * This removes the burden of knowing the structure from the Controller.
+     */
+    public static function empty(int $perPage = 15): self
+    {
+        return new self(
+            items: [],
+            total: 0,
+            currentPage: 1,
+            perPage: $perPage,
+            lastPage: 1,
+        );
+    }
 }

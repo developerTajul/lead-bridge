@@ -21,7 +21,9 @@ Route::prefix('v1')->group(function () {
         ->middleware(['throttle:60,1']);
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/users', [UserController::class, 'index']);
+        // Create and delete have no use case on the user service yet, so the
+        // resource exposes only the three actions that are implemented.
+        Route::apiResource('users', UserController::class)->only(['index', 'show', 'update']);
         Route::apiResource('activities', ActivityController::class);
         Route::apiResource('companies', CompanyController::class);
         Route::apiResource('contacts', ContactController::class);
@@ -34,6 +36,7 @@ Route::prefix('v1')->group(function () {
         Route::get('leads/{lead}/activities', [LeadActivityController::class, 'index']);
         Route::post('leads/{lead}/convert', [LeadConversionController::class, 'convert']);
         Route::get('pipelines/{pipeline}/kanban', [PipelineController::class, 'kanban']);
+        Route::get('dashboard', [DashboardController::class, 'index']);
         Route::get('dashboard/metrics', [DashboardController::class, 'metrics']);
     });
 

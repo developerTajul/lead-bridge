@@ -31,9 +31,8 @@
 
                     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
                         <div>
-                            <span class="badge bg-primary text-uppercase sm-text">leads table</span>
                             <h3 class="mt-2 mb-1 text-capitalize">Lead List</h3>
-                            <p class="mb-0 text-muted sm-text">Inbound leads captured from every source.</p>
+                            <p class="mb-0 text-muted sm-text">All leads come from different sources</p>
                         </div>
                         <div class="d-flex align-items-center gap-2 mt-3 mt-sm-0">
                             <span class="badge rounded-pill bg-light text-dark sm-text">

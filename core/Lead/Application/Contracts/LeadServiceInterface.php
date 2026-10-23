@@ -21,6 +21,10 @@ interface LeadServiceInterface
 
     /**
      * Creates a lead directly via the repository.
+     *
+     * @param LeadCreateDTO $leadCreateDTO
+     *
+     * @return Result Contains the LeadResponseDTO on success.
      */
     public function createLead(LeadCreateDTO $leadCreateDTO): Result;
 
@@ -48,7 +52,7 @@ interface LeadServiceInterface
      * @param int        $leadId
      * @param LeadStatus $status
      *
-     * @return Result Contains the LeadEntity on success.
+     * @return Result Contains the LeadResponseDTO on success.
      */
     public function changeStatus(int $leadId, LeadStatus $status): Result;
 }

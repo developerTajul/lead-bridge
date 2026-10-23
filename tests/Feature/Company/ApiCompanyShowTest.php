@@ -133,6 +133,16 @@ final class ApiCompanyShowTest extends TestCase
 
                 return $this->detail;
             }
+
+            /**
+             * The detail endpoint this test covers reads through
+             * findDetailById(), so the single company read is not exercised
+             * here and reports a missing company.
+             */
+            public function findById(int $id): ?CompanyEntity
+            {
+                return null;
+            }
         };
 
         $this->app->instance(CompanyQueryContract::class, $repository);
