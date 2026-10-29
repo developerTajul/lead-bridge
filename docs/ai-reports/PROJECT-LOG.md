@@ -4,6 +4,69 @@ Running log of executed steps. Newest entry first.
 
 ---
 
+## 2026-10-29 — Dashboard: Actionable Cockpit, Step 01 (design only)
+
+- **Status:** DONE_WITH_NOTES. **No application code was written.** Design deliverables produced;
+  four premises in the brief did not hold.
+- **Report:** `docs/ai-reports/dashboard/01-actionable-cockpit.md`
+- **Decisions:** D-145 … D-154
+
+### What this step produced
+
+The four requested deliverables — layout blueprint, DTO definition, service signature, mapping
+strategy — as a design against the **existing** Dashboard module, which turned out to already satisfy
+most of the brief's architectural mandates. `DashboardQueryService` has always been read-only, the
+read ports and adapters are already split correctly, and `getOverview()` already returns the whole page
+in one call.
+
+The blueprint promotes Zone B (Action Center) **above** the four vanity tiles, because the current page
+opens with `Won revenue` / `Open pipeline` / `Win rate` / `Pending activities` while **13 overdue
+activities sit below the fold**. It adds an `actionCenter` field to `DashboardOverviewResponseDTO` and
+one method, `getActionCenter()`, to the query contract. No existing DTO property is renamed, so
+`/api/v1/dashboard` and the Blade page keep every key they have today.
+
+Every new action calls an **existing** Lead command contract. No dashboard command service and no new
+dashboard route.
+
+### Four brief premises that did not hold
+
+| Premise | Reality |
+| --- | --- |
+| Add "Bids / Proposals / Negotiation" to `leads.php` | No data model — five lead statuses, no round/version column, zero grep hits. **Deferred by the developer.** (D-145) |
+| Conversion Velocity = New → Converted | **Not computable.** No `status_changed_at`, no history table; and the schema indexes exactly one status value, so the brief's "Contacted"/"Qualified" are not stored states. (D-148) |
+| Create `DashboardProjectionDTO` / `DashboardResponseDTO` / `DashboardRepository` | All three roles **already exist** as `DashboardMetrics`, `DashboardOverviewResponseDTO` and the three read adapters. Creating them would be the duplicate-file violation. (D-151) |
+| "Best performing source" | `leads.source` is free text with 7 values across 11 rows, **5 of them prose** — a naive `MAX` reports a lorem-ipsum sentence as the best channel. Left undefined deliberately. (D-153) |
+
+The third is the **third** occurrence of the same class of stale premise (after D-137 and D-141) and
+is proposed as an AGENTS.md line.
+
+### Measured, not estimated
+
+A bootstrapped probe against the live `lead_bridge_db` produced every number in the report: leads by
+status `{new:5, contacted:2, qualified:1, converted:3, lost:0}`, **11/11 unassigned**, 7 distinct
+sources, activities `{overdue:13, upcoming:0, done:1}`, 1 conversion at **219 h**, 1 currency.
+
+Two of those measurements changed the design: **all 5 `new` leads already carry activities** (so
+"uncontacted" cannot mean "untouched", D-146), and **all 13 pending activities are overdue and zero are
+upcoming** (so today's "Upcoming activities" panel is already the overdue list under a misleading name,
+D-154).
+
+### Eight defects found and deliberately not fixed
+
+Recorded in §7 of the report. The highest-value: **P2 violation** — `DashboardMetricsResponseDTO`
+declares money as `float` where AGENTS.md mandates `string`; and **`lead_module_plan.md` §1 declares
+lead columns that do not exist** (`first_name`, `last_name`, `notes`, `deleted_at`), the same drift
+already filed as D-116.
+
+### Why this halted rather than built
+
+AGENTS.md STRICT SCOPE ADHERENCE forbids acting outside the prompt and FILE EXISTENCE GUARD makes an
+occupied path a stop, but neither covers *"the prompt names a thing that does not exist"*. Two entries
+needed a business rule nobody has stated (the stale thresholds, and which "best source" means), and one
+— the bidding copy — was put to the developer, who chose to defer it.
+
+---
+
 ## 2026-10-21 — User module, Step 02: UserEntity as a Rich Domain Model
 
 - **Status:** COMPLETE, verified by execution. Two deviations carried forward.

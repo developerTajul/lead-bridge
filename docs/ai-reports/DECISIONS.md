@@ -6,6 +6,288 @@ to `AGENTS.md` for the developer to accept or reject.
 
 ---
 
+## 2026-10-29 — Dashboard: Actionable Cockpit (design only, no code written)
+
+Step: `dashboard/01-actionable-cockpit`. Report: `docs/ai-reports/dashboard/01-actionable-cockpit.md`.
+**No application code was written, so nothing here is verified against a diff.** Every entry is a
+design decision awaiting the developer's go-ahead.
+
+### D-145 — The "three-round bidding" copy is NOT added: it has no data model behind it
+
+**Situation.** The brief asked for three new keys in `resources/lang/en/leads.php` — "Bids",
+"Proposals", "Negotiation". AGENTS.md's STRICT SCOPE ADHERENCE forbids acting outside the prompt and
+FILE EXISTENCE GUARD makes an occupied path a stop; neither covers "the prompt names a thing that does
+not exist". The developer confirmed 文案先放着,只做 Dashboard — leave the copy, do the Dashboard only.
+
+**Finding.** None of the three has a data model, a status, or a table behind it, so a key added today
+would render nowhere. Audited:
+
+- `LeadStatus` (`core/Lead/Domain/Enums/LeadStatus.php`) declares exactly five cases — `new`,
+  `contacted`, `qualified`, `converted`, `lost`.
+- `LeadTransitions::ALLOWED` (`core/Lead/Domain/LeadTransitions.php`) walks them one step at a time
+  and names no bidding round.
+- `deals` (`database/migrations/2026_09_29_234547_create_deals_table.php`) carries a single
+  `decimal('amount', 15, 2)`. There is no round, version, or revision column, and no
+  bids/proposals/negotiations table among the 15 migrations.
+- A case-insensitive search for `bid`, `proposal` and `negotiat` across `core/`, `app/`, `database/`,
+  `resources/` and `docs/` returned **zero matches for the bidding flow**. The literal substring `bid`
+  does hit 8 times as an inside-word fragment of `jobIdentifier` / `job identifier` in the Shared queue
+  port and its adapter, plus one unrelated prose comment
+  (`resources/views/admin/deals/index.blade.php`: "cannot remove a deal mid-negotiation"). Nothing
+  matches `proposal`, and nothing matches `negotiation` as a domain concept.
+
+**Decision (the developer's).** Do not add the keys. Recorded here so the request is not silently
+dropped and so a future step does not re-add three keys whose data model still does not exist.
+
+**What would have to exist first.** Which statuses the three rounds are, where each round's amount is
+stored, who moves a lead between rounds, and what happens to a lead that fails a round.
+
+**Proposed AGENTS.md change.** None. STRICT SCOPE ADHERENCE covers it.
+
+### D-146 — "New Leads (Uncontacted)" is defined as `status = new`, not as "never called"
+
+**Situation.** The brief names "New Leads (Uncontacted)" as the most urgent metric but defines neither
+word. AGENTS.md forbids inventing a business rule, so the definition has to come from an existing one
+or be recorded as a gap.
+
+**Finding — neither reading is fully provable today.**
+
+| Reading | Status | Evidence |
+| --- | --- | --- |
+| `status = 'new'` | **Backed** | `LeadStatus::NEW`, the `leads.status` default of `'new'`, and the transition table's entry point |
+| "no completed call/meeting/email activity" | **Contradicted in the live data** | All 5 `new` leads already carry activities |
+
+**Decision.** Define it as `status = 'new'`, and surface the activity-based reading as a separate,
+honestly-named metric rather than conflating them.
+
+**Why, beyond "the column is there".** The Activity module has no path back to `LeadStatus`. A logged
+call is *not* a status transition — the Lead details page's own quick-action bar logs a call without
+contacting the lead, and no listener moves the status. So "uncontacted" read as *never touched* is a
+quantity the system can measure but the status machine cannot act on, and pairing it with the word
+"urgent" would label a lead urgent forever with no status change able to clear it. The actionable
+reading is the one whose clearing action is a real, already-implemented `LeadEntity::transitionTo()`.
+
+**Considered and rejected.** Inferring a `CallLogged` domain event from the presence of a call
+activity. That invents both a business rule and a cross-module coupling, and the evidence does not
+support it: all 5 `new` leads already carry activities, so the inference would classify the entire
+cohort as contacted on day one.
+
+**Proposed AGENTS.md change.** None — this is a definition gap in the brief, not a rule gap. The
+developer should confirm the definition, and it should then be written into the Dashboard module's
+plan.
+
+### D-147 — Stale-lead thresholds are proposed as literals and deliberately left unset
+
+**Situation.** Zone B asks for "leads that […] have been in the same stage for too long (Stale
+Leads)". No number exists anywhere in the project.
+
+**Finding.** Core holds **no** duration constant of any kind — the only time constant in the whole of
+`core/` is `ActivityEntity::CLOCK_SKEW_TOLERANCE_SECONDS = 60`, a clock-skew guard, not a threshold.
+`DashboardRules` holds only `FEED_LIMIT = 8` and `BOARD_LIMIT = 12`. There is also no `overdue`
+concept for leads: `ActivityEntity::isOverdue(DateTimeImmutable $now)` exists for *activities* only.
+
+**Decision.** Do not pick the thresholds. The blueprint names candidate values and marks each one
+**UNSET**, with the rule that an unconfigured stale panel renders as "not configured" rather than as
+an empty list — an empty list would be an unverifiable claim that no lead is stale. When the developer
+supplies the numbers they become named constants on `DashboardRules`, or on a Lead-owned rules class,
+since the threshold is a fact about leads rather than about the dashboard.
+
+**Proposed AGENTS.md change.** None.
+
+### D-148 — Conversion Velocity ("New → Converted") is not computable, and the plan filed a false claim about it
+
+**Situation.** Zone A asks for "Avg. time it takes for a lead to move from 'New' → 'Converted'".
+
+**Finding — the endpoints are not observable.** Both are needed and neither exists:
+
+- **"Left New" is recorded nowhere.** No `status_changed_at` column on `leads`; no lead-status-change
+  history table. A lead's only timestamps are `created_at` and `updated_at`, and `updated_at` is
+  written by *every* edit, so it does not record the transition. The value cannot be recovered
+  retroactively, so this is **not fixable by a query and not fixable by a backfill** — it needs a new
+  column and a write-path change.
+- **"Reached Converted" is stored differently from the brief's expectation.** Of `LeadStatus`'s five
+  cases the schema indexes **one**: `$table->string('status')->default('new')->index()`. The brief's
+  "Contacted" and "Qualified" are not distinct states in the system at all; they are the same state as
+  "New". "Converted" *is* observable, but through `lead_conversions.converted_at` (unique per lead,
+  `useCurrent()`) rather than through a timestamp on the lead.
+- **`created_at` → `converted_at` is computable but is NOT the requested metric.** It measures
+  capture-to-conversion, so it includes however long the lead sat in *New* without moving. The live
+  database holds exactly one conversion — created `2026-10-03 13:05:05`, converted `2026-10-12
+  16:32:00`, i.e. **219 hours ≈ 9.1 days** — and that single row is almost certainly a probe row.
+
+**Decision.** Do not compute it against the brief's wording. Either (a) report capture-to-conversion
+under an honest name such as "Avg. time to convert", or (b) treat the `status_changed_at` column plus a
+status-history table as its own step.
+
+**Recorded also because it corrects a claim in the plan.**
+`docs/ai-plans/lead/lead_module_plan.md` §1 declares `first_name`, `last_name`, `notes` and
+`deleted_at` as lead columns. The live `leads` table has **none** of the four — it has `name`,
+`company_name`, and no soft deletes. The plan is the drifted artifact, the same finding already
+recorded as D-116, and this brief's status vocabulary is drifting with it. **Do not build the velocity
+metric against the plan's schema.**
+
+**Proposed AGENTS.md change.** Consider requiring that a brief naming a computed metric also names the
+columns the metric reads, so an uncomputable metric is caught at design time rather than mid-build.
+
+### D-149 — "Assign Me a New Lead" means the most urgent *unassigned* lead, not a new one
+
+**Situation.** Zone B proposes a Quick Action button labelled "Assign Me a New Lead".
+
+**Decision.** Interpret as **"claim an unassigned lead"**: reassigning an already-owned lead from
+another agent is a different action with different semantics — a take-over, arguably an admin
+privilege — and the brief's stated intent is to shorten the time from seeing work to starting it.
+
+**Finding — "unassigned" and "new" are independent, and the brief's target cohort is not what the
+label implies.** All **5** `new` leads are unassigned, but so is every other lead: **all 11 leads in
+the live database are unassigned**, including 3 `converted` and 2 `contacted`. A button offering *the
+most urgent unassigned lead* would therefore frequently hand over a lead that is not new.
+
+**Decision.** The button offers the most urgent **unassigned** lead, ordered by status urgency and then
+by age, and its label should say so. If the developer wants "new only", that is a filter change and
+should be stated as one.
+
+**Reuse, not new construction.** The write side already exists and does exactly this:
+`LeadOwnerCommandServiceContract::assignOwner(LeadOwnerAssignDTO)` with
+`(leadId, assignedTo, requestedBy)`, refusing a non-existent user and returning a
+`LeadOwnerResponseDTO`. `App\Http\Controllers\Api\V1\LeadController` already exposes it. The dashboard
+must **call** it, not rebuild it.
+
+**Proposed AGENTS.md change.** None.
+
+### D-150 — The inline status write reuses the existing `admin.leads.update` route rather than adding a dashboard route
+
+**Situation.** Zone B's inline action needs a write endpoint. The brief's flow diagram reads
+"Controller → Mapper → CommandService → Entity Behavior → Repository".
+
+**Decision.** Do not add a route. `admin.leads.update` already reaches `LeadCommandService` →
+`LeadEntity::transitionTo()` → `LeadTransitions::can()` → the lead write repository, which is exactly
+the flow the brief describes. A second route to the same use case would be a second entry point to one
+port, which FILE EXISTENCE GUARD and PORT METHOD NAMING both push against.
+
+**Status: needs the developer's confirmation**, because A10 lists "any change outside the step's scope"
+as a hard stop, and the wiring exception covers only "a newly created Controller action in the current
+step" — this is an existing route, not a new one.
+
+**Proposed AGENTS.md change.** None.
+
+### D-151 — The cockpit is delivered as a `DashboardOverviewResponseDTO` field, not as a second DTO
+
+**Situation.** The brief asks for both a `DashboardProjectionDTO` and a `DashboardResponseDTO`, while
+also requiring "ONE single call to avoid multiple HTTP requests".
+
+**Finding — a naming conflict with what exists, and a shape conflict with AGENTS.md.**
+
+The standing inventory is:
+
+| Layer | Existing artifact | Side |
+| --- | --- | --- |
+| Read model (Domain) | `DashboardMetrics`, `PipelineBoardSummary`, `ActivityFeedEntry` | read |
+| Port (Domain) | `DashboardMetricsContract`, `DashboardBoardContract`, `DashboardFeedContract` | read |
+| Adapter (Infra) | `DashboardMetricsRepository`, `DashboardBoardRepository`, `DashboardFeedRepository` | read |
+| Application mapper | `DashboardResponseMapper` (concrete, no contract) | read |
+| Response DTO | `DashboardOverviewResponseDTO` and its three children | read |
+
+So the read model the brief calls `DashboardProjectionDTO` **already exists** as
+`Core\Dashboard\Domain\DataObjects\DashboardMetrics`, and the projection-returning ports and adapters
+exist with it. Per FILE EXISTENCE GUARD, creating a second file at a path already occupied is the
+damaging case. Separately, AGENTS.md *(WRITE AND READ PORT PLACEMENT)* forbids a `DashboardRepository`
+doing both reads and writes: Dashboard is read-only, so it has **no** `RepositoryContract` at all, only
+read ports. The brief's "a specific DashboardRepository must handle the aggregations" is therefore
+already satisfied three times over.
+
+**Decision.** Add one field, `actionCenter`, to the existing `DashboardOverviewResponseDTO`. Keep the
+flat `DashboardMetricsResponseDTO` untouched, so **the web path needs no controller change** and the
+**API path's existing keys are untouched**. Additive only: no rename, and no new DTO for data that
+already has one.
+
+**Proposed AGENTS.md change.** None — but worth noting that "the brief's proposed class names already
+exist under other names" is the same class of stale premise as D-137 and D-141, and this is its third
+occurrence.
+
+### D-152 — The action-feed store is a new *read* port, not a widening of the feed port; and the brief's `Result<DashboardResponseDTO>` is not adopted
+
+**Situation.** The brief requires `DashboardQueryService` to return one payload covering all four
+zones, and asks the controller to return `Result<DashboardResponseDTO>`.
+
+**Decision — two parts.**
+
+1. The urgency store is declared as its own read port, `DashboardActionFeedContract`, with its own DTO,
+   and does **not** widen `DashboardFeedContract`. The precedent is already in this module and one step
+   old: `DashboardBoardContract::getDefaultPipelineId()` was declared on the Dashboard's own port
+   rather than widening the Deal module's contract (D-139). Like the other Dashboard read adapters it
+   extends **nothing** — a read adapter that can `save()` is a boundary breach.
+2. `Result<DashboardResponseDTO>` is **not** adopted as a literal signature. The project's `Result` is a
+   plain `final readonly class` wrapping `mixed`, not a generic; parameterising it would change the
+   envelope's contract across every module, far outside this step. The stated intent — one DTO, one
+   call, the controller maps nothing — is already met by the existing `getOverview()` returning a
+   `Result` around `DashboardOverviewResponseDTO`.
+
+**Proposed AGENTS.md change.** None.
+
+### D-153 — "Best performing source" is left undefined, because the two defensible readings disagree
+
+**Situation.** Zone D asks which lead source has the highest conversion rate.
+
+**Finding.** `leads.source` is **free text with no foreign key and no enum**. The live database holds
+**seven distinct values across 11 rows**, and five of them are prose rather than source names:
+
+| Source | Leads |
+| --- | --- |
+| `landing_page` | 3 |
+| `postman` | 3 |
+| `probe` | 1 |
+| `website` | 1 |
+| a 63-character Latin lorem-ipsum sentence | 1 |
+| a 77-character Latin lorem-ipsum sentence | 1 |
+| a 97-character Latin lorem-ipsum sentence | 1 |
+
+Any of the three singleton lorem rows wins outright on raw percentage, so **a naive `MAX` would report
+a made-up sentence as the best channel.** The two defensible readings also point at different
+features: highest conversion **rate**, which needs a minimum-volume guard, versus highest conversion
+**count**, which needs none.
+
+**Decision.** Define nothing. Ask which question is meant, and whether a minimum sample size should
+gate a rate-based answer. Recorded rather than guessed, because guessing produces a number that looks
+authoritative and is wrong — the worst possible output for a dashboard.
+
+**Proposed AGENTS.md change.** None. `/admin/leads` exposes a free-text `source` filter and nothing in
+the codebase states whether `source` is a lookup key or a free-form attribution string; until that is
+stated, `source` is not a usable grouping key.
+
+### D-154 — All 13 pending activities are overdue, so the urgency panel needs a lookback window
+
+**Situation.** Zone B replaces "Upcoming Activities" with "Overdue/Urgent".
+
+**Finding.** Measured on the live database:
+
+| Bucket | Count |
+| --- | --- |
+| Overdue — `due_date < now()`, not completed | **13** |
+| Upcoming — `due_date >= now()`, not completed | **0** |
+| Pending with no due date | 0 |
+| Completed | 1 |
+
+`DashboardFeedRepository::getUpcomingActivities()` filters `completed_at IS NULL` **and**
+`due_date IS NOT NULL`, then orders `due_date ASC`. Today's "Upcoming activities" panel is therefore
+already showing the 13 **overdue** rows, oldest first — it is the urgency list under a misleading name.
+Renaming it changes the label but not the content, and at 8 rows (`FEED_LIMIT`) it silently truncates 5
+of them behind "view all".
+
+**Decision.** The cockpit splits the panel into *Overdue* (ascending by due date, so the oldest debt
+leads) and *Due soon* (ascending), and the blueprint carries **the same "unset threshold" treatment as
+D-147** for how far back an overdue row is still worth showing. Note also that the feed repository
+skips activities with no due date entirely — 0 rows today, but that is why its count must not be
+assumed to match `metrics.pendingActivities`.
+
+**Date handling.** `DashboardResponseMapper::toAtom()` emits UTC ISO-8601, and the Blade calls
+`Carbon::parse()` with **no explicit timezone**, so it currently renders in `APP_TIMEZONE` rather than
+UTC. Overdue styling must compute against **UTC**; the `due_date` mapping itself should be addressed as
+its own change rather than silently inside this step.
+
+**Proposed AGENTS.md change.** None.
+
+---
+
 ## D-001 — Module bindings live in a `<Module>ServiceProvider`, not `AppServiceProvider`
 
 - **Date:** 2026-10-20
